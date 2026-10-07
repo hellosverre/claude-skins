@@ -4,7 +4,7 @@ import { DEFAULT_PREFS, parsePrefs, runSkinCommand } from '../hooks/command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from '../hooks/custom'
 import { runDesign } from '../hooks/designer'
 import { clipLines, diffstat, formatDuration, formatMs, pick, shortenPath } from '../hooks/format'
-import { columnWidths, padCell, splitReply } from '../hooks/markdown'
+import { columnWidths, cutCell, padCell, splitReply, widthOf } from '../hooks/markdown'
 import { codeSvg, tokenize } from '../hooks/svg-code'
 import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
@@ -101,6 +101,14 @@ test('columns narrow from the widest until the table fits, and cells pad to thei
   expect(columnWidths(table, 20, 3)).toEqual([15, 2])
   expect(padCell('abc', 6, 'right')).toBe('   abc')
   expect(padCell('abcdefgh', 5, 'left')).toBe('abcd…')
+})
+
+test('wide characters count two cells, so CJK cells are measured and cut in terminal cells', async () => {
+  expect(widthOf('레일, 스피너')).toBe(12)
+  expect(widthOf('e\u0301')).toBe(1)
+  expect(cutCell('레일, 스피너', 12)).toBe('레일, 스피너')
+  expect(cutCell('레일, 스피너', 5)).toBe('레일…')
+  expect(widthOf(padCell('레일', 8, 'left'))).toBe(8)
 })
 
 test('a made skin lays its slots over its base, and bad drafts are refused with a reason', async () => {

@@ -109,7 +109,61 @@ export function splitReply(markdown: string): Segment[] {
   return segments
 }
 
-const widthOf = (text: string): number => [...text].length
+// Terminal cells a character takes: wide East Asian characters and emoji take two,
+// combining marks and zero-width joiners none.
+const WIDE: readonly (readonly [number, number])[] = [
+  [0x1100, 0x115f],
+  [0x2e80, 0x303e],
+  [0x3041, 0x33ff],
+  [0x3400, 0x4dbf],
+  [0x4e00, 0x9fff],
+  [0xa000, 0xa4cf],
+  [0xa960, 0xa97f],
+  [0xac00, 0xd7a3],
+  [0xf900, 0xfaff],
+  [0xfe10, 0xfe19],
+  [0xfe30, 0xfe6f],
+  [0xff00, 0xff60],
+  [0xffe0, 0xffe6],
+  [0x1f300, 0x1f64f],
+  [0x1f900, 0x1f9ff],
+  [0x20000, 0x3fffd],
+]
+
+const charWidth = (char: string): number => {
+  const code = char.codePointAt(0) ?? 0
+
+  if (/\p{Mn}|\p{Me}|\u200d|[\ufe00-\ufe0f]/u.test(char)) {
+    return 0
+  }
+
+  return WIDE.some(([from, to]) => code >= from && code <= to) ? 2 : 1
+}
+
+export const widthOf = (text: string): number => [...text].reduce((sum, char) => sum + charWidth(char), 0)
+
+// `text` cut to `width` cells, marked with an ellipsis where it lost text.
+const cutTo = (text: string, width: number): string => {
+  if (widthOf(text) <= width) {
+    return text
+  }
+
+  let kept = ''
+  let used = 0
+
+  for (const char of text) {
+    const next = charWidth(char)
+
+    if (used + next > width - 1) {
+      break
+    }
+
+    kept += char
+    used += next
+  }
+
+  return `${kept}…`
+}
 
 // Natural column widths, narrowed from the widest down until the table fits.
 export function columnWidths(table: Table, maxWidth: number, gap: number): number[] {
@@ -133,15 +187,12 @@ export function columnWidths(table: Table, maxWidth: number, gap: number): numbe
 
 // A cell cut to its column, marked with an ellipsis where it lost text.
 export function cutCell(text: string, width: number): string {
-  const chars = [...text]
-
-  return chars.length > width ? `${chars.slice(0, Math.max(0, width - 1)).join('')}…` : text
+  return cutTo(text, width)
 }
 
 export function padCell(text: string, width: number, align: Align): string {
-  const chars = [...text]
-  const cut = chars.length > width ? `${chars.slice(0, Math.max(0, width - 1)).join('')}…` : text
-  const room = width - [...cut].length
+  const cut = cutTo(text, width)
+  const room = width - widthOf(cut)
 
   if (align === 'right') {
     return ' '.repeat(room) + cut
