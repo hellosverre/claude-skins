@@ -106,6 +106,11 @@ test('columns narrow from the widest until the table fits, and cells pad to thei
 test('wide characters count two cells, so CJK cells are measured and cut in terminal cells', async () => {
   expect(widthOf('레일, 스피너')).toBe(12)
   expect(widthOf('e\u0301')).toBe(1)
+  expect(widthOf('中文')).toBe(4)
+  expect(widthOf('カタカナ')).toBe(8)
+  expect(widthOf('ok 🚀')).toBe(5)
+  expect(widthOf('👍🏽')).toBe(2)
+  expect(widthOf('🫠')).toBe(2)
   expect(cutCell('레일, 스피너', 12)).toBe('레일, 스피너')
   expect(cutCell('레일, 스피너', 5)).toBe('레일…')
   expect(widthOf(padCell('레일', 8, 'left'))).toBe(8)

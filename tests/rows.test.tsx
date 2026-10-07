@@ -2,6 +2,8 @@ import type { On, RenderElement } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { widthOf } from '../hooks/markdown'
+
 const SURFACES = ['terminal', 'desktop'] as const
 
 const SITE = { plugin: 'skins', viewport: { columns: 100, rows: 30 } } as const
@@ -176,6 +178,34 @@ test('a reply with a table draws the table, a reply without one keeps its own dr
 
   const plain = await $.ui.mount(reply('No table | here, just a pipe.'))
   expect(await plain.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
+test('a terminal table sizes Korean, Chinese, Japanese and emoji cells to their full width', async ($, on) => {
+  stubEngine(on)
+
+  const cells = ['레일, 스피너', '中文字符', 'カタカナ', '🚀 ship']
+  const text = `| Slot | Use |\n|---|---|\n${cells.map((cell, i) => `| s${i} | ${cell} |`).join('\n')}`
+  const ui = await $.ui.mount({ ...SITE, surface: 'terminal', component: 'AssistantMessage', requestId: 'cjk', props: { text, isFirstOfReply: true } })
+
+  type Node = { type?: string; props?: { width?: unknown }; children?: readonly (Node | string)[] }
+  // The box a cell's Text sits in, found by the cell's text.
+  const boxOf = (node: Node | string | undefined, cell: string): Node | undefined => {
+    if (node === undefined || typeof node === 'string') {
+      return undefined
+    }
+    const holds = node.children?.some(child => typeof child !== 'string' && child.type === 'Text' && child.children?.join('') === cell)
+    return holds ? node : node.children?.map(child => boxOf(child, cell)).find(found => found !== undefined)
+  }
+  const root = (await ui.find({ type: 'Box' })) as Node
+
+  for (const cell of cells) {
+    expect(await ui.find({ type: 'Text', text: cell })).toBeDefined()
+    // Each cell's box holds its terminal width plus padding, so nothing is cut with an ellipsis.
+    expect(boxOf(root, cell)?.props?.width).toBe(widthOf('레일, 스피너') + 2)
+  }
+
+  expect(await ui.find({ type: 'Text', text: /…$/ })).toBeUndefined()
+  await ui.unmount()
 })
 
 test('the terminal spinner shimmers, the desktop one is an animated icon beside its step', async ($, on) => {

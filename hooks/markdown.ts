@@ -110,7 +110,7 @@ export function splitReply(markdown: string): Segment[] {
 }
 
 // Terminal cells a character takes: wide East Asian characters and emoji take two,
-// combining marks and zero-width joiners none.
+// combining marks, zero-width joiners and skin-tone modifiers none.
 const WIDE: readonly (readonly [number, number])[] = [
   [0x1100, 0x115f],
   [0x2e80, 0x303e],
@@ -126,14 +126,16 @@ const WIDE: readonly (readonly [number, number])[] = [
   [0xff00, 0xff60],
   [0xffe0, 0xffe6],
   [0x1f300, 0x1f64f],
+  [0x1f680, 0x1f6ff],
   [0x1f900, 0x1f9ff],
+  [0x1fa70, 0x1faff],
   [0x20000, 0x3fffd],
 ]
 
 const charWidth = (char: string): number => {
   const code = char.codePointAt(0) ?? 0
 
-  if (/\p{Mn}|\p{Me}|\u200d|[\ufe00-\ufe0f]/u.test(char)) {
+  if (/\p{Mn}|\p{Me}|\u200d|[\ufe00-\ufe0f]|\p{Emoji_Modifier}/u.test(char)) {
     return 0
   }
 
