@@ -1,7 +1,7 @@
 import { atom, memberOf, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderSurface, Timer } from 'claude-code'
 
-import type { CustomSkin, Disclosure, Prefs, SkinSlot, Touch, TurnStats, UsageSnap } from '../types'
+import type { CustomSkin, Disclosure, Prefs, SkinSlot, SkinsMarkdownArgs, Touch, TurnStats, UsageSnap } from '../types'
 import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES, withCalm } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
 import { forTheme, gnomeDark, macDark, resolveLight, windowsDark } from './light'
@@ -11,12 +11,8 @@ import type { DesignState } from './designer'
 import { clipLines, diffstat, pick } from './format'
 import { bodyOf, inputFields, isOpen } from './detail'
 import { disclosedRow, openedRows } from './detail-rows'
-import { drawsBlocks, hasBlocks } from './blocks'
-import { copyOf, isShell, splitReply } from './markdown'
-import type { Segment } from './markdown'
-import { CHART_HINT, parseMermaid } from './mermaid'
-import { artKind } from './mermaid-art'
-import { inlineMath } from './math'
+import { copyOf } from './markdown'
+import { CHART_HINT } from './mermaid'
 import { commandSegments } from './command-output'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
@@ -33,6 +29,7 @@ import { limitLabel, metersOf } from './svg-usage'
 import { shortenPath } from './format'
 import { kindOf, summarize, toolLabel } from './tools'
 import { commandOf, errorLine, isQuiet, quietLabel } from './quiet'
+import { MAX_MARKDOWN, replySegments } from './reply'
 import { isDue, isNewer, LATEST_URL, updateNotice, versionOf } from './updates'
 import { hyperlinksFrom, touchOf } from './links'
 import type { Checked } from './updates'
@@ -42,9 +39,7 @@ const GALLERY = 'skins-gallery'
 const DESIGN = `mcp__skins__${DESIGN_TOOL.name}`
 const DESIGN_MATCH = /^mcp__skins__design$/
 
-// Markdown takes at most 10000 characters a block; a longer prompt keeps Claude Code's
-// own drawing, which folds a big paste.
-const MAX_MARKDOWN = 9000
+// A longer prompt keeps Claude Code's own drawing, which folds a big paste.
 const MAX_PROMPT = 4000
 
 const CLIP_HEAD = 8
@@ -354,7 +349,41 @@ async function designState($: EngineInterface): Promise<DesignState> {
   return { prefs: await read($, prefsAtom), custom: await read($, customAtom) }
 }
 
+const SURFACES: readonly RenderSurface[] = ['terminal', 'desktop', 'vscode', 'mobile']
+
+// `$.skins.markdown`: markdown drawn the way the skin draws a reply, for another mod's
+// drawing. Undefined when the skin is off or the text holds nothing it draws. No copy or
+// fold controls: a press cannot cross from one mod's tree to another's.
+async function drawMarkdown($: EngineInterface, args: SkinsMarkdownArgs): Promise<RenderElement | undefined> {
+  if (!SURFACES.includes(args.surface) || typeof args.text !== 'string' || !Number.isFinite(args.columns)) {
+    throw new Error('skins.markdown takes { surface, text, columns }: a surface name, a string and a number')
+  }
+
+  const active = await activeSkin($)
+  const segments = active === null || args.text.length > MAX_MARKDOWN * 4 ? null : replySegments(args.text, active.prefs, args.surface)
+
+  if (active === null || segments === null) {
+    return undefined
+  }
+
+  const ui = $.ui.resolve({ surface: args.surface, component: 'AssistantMessage' })
+  const svg = args.surface !== 'terminal' && active.prefs.tables === 'on' && 'Svg' in ui ? ui.Svg : undefined
+  const links = active.prefs.links && (args.surface !== 'terminal' || (await read($, hyperlinksAtom)))
+
+  return replyRows({ ...lookOf(ui, active, args.surface), links, isFirstDraw: () => false }, segments, Math.max(20, Math.floor(args.columns)), svg)
+}
+
 export const register: Register = on => {
+  // Adds `$.skins` for other mods. A call is the `skins.markdown` event, which the hook
+  // below answers with this session's `$`; the method itself is the chain's floor.
+  on('engine.create', async ($, e, next) => {
+    const built = await next(e)
+
+    return { ...built, skins: { markdown: async () => undefined } }
+  })
+
+  on('skins.markdown', async ($, e) => ({ value: await drawMarkdown($, e) }))
+
   // What the turn on the main loop has done so far, for its footer.
   let stats: TurnStats = NO_STATS
   let isWorking = false
@@ -792,37 +821,9 @@ reply width: ${lastColumns} columns`
     }
 
     const { prefs } = active
-    const cards = prefs.tables !== 'off' && /\||```|~~~/.test(text)
-    // The terminal draws every paragraph itself; elsewhere only alerts and task lists.
-    const blocks = prefs.markdown && (e.surface === 'terminal' || hasBlocks(text))
-    // With cards off, a Mermaid fence the parser reads is still split out to draw.
-    const charts = prefs.charts && /mermaid/i.test(text)
-    // Display formulas become cards, inline TeX Unicode.
-    const math = prefs.math && /\$|```math|\\\[|\\\(/.test(text)
+    const segments = replySegments(text, prefs, e.surface)
 
-    if (!cards && !blocks && !charts && !math) {
-      return next(e)
-    }
-
-    const charted = (lang: string, code: string) =>
-      lang === 'mermaid' && (parseMermaid(code) !== null || (e.surface === 'terminal' && artKind(code) !== null))
-    const segments: Segment[] = cards
-      ? splitReply(text, { tables: true, fence: () => true, math })
-      : charts || math
-        ? splitReply(text, { tables: false, fence: (lang, code) => charts && charted(lang, code), math })
-        : [{ kind: 'text', text }]
-    const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
-    // Off the terminal a shell fence keeps the app's drawing, for its Run button; a reply
-    // with nothing else to draw is left to the app whole.
-    const kept = e.surface === 'terminal' ? segments : segments.filter(segment => !isShell(segment))
-    const drawn = kept.some(
-      segment =>
-        segment.kind !== 'text' ||
-        (prefs.markdown && drawsBlocks(segment.text, e.surface)) ||
-        (math && inlineMath(segment.text) !== segment.text),
-    )
-
-    if (!fits || !drawn) {
+    if (segments === null) {
       return next(e)
     }
 

@@ -79,7 +79,20 @@ export type Touch = 'created' | 'edited'
 // call failed.
 export type Disclosure = 'auto' | 'open' | 'closed'
 
+// `$.skins.markdown`'s argument: where the tree draws, the markdown, the width in columns.
+export type SkinsMarkdownArgs = { surface: 'terminal' | 'desktop' | 'vscode' | 'mobile'; text: string; columns: number }
+
 declare module 'claude-code' {
+  // What skins adds to `$` for other mods.
+  interface EngineInterface {
+    skins: {
+      // Markdown drawn the way skins draws a reply in the person's skin: tables, code,
+      // diagrams, math, alerts. Undefined when skins is off or the text holds nothing it
+      // draws; throws on a malformed argument. No copy or fold controls.
+      markdown: (args: SkinsMarkdownArgs) => Promise<RenderElement | undefined>
+    }
+  }
+
   interface PluginState {
     skins: {
       prefs: Prefs
