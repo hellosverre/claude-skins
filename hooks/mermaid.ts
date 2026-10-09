@@ -341,6 +341,22 @@ export function chartHeading(chart: Chart): { kind: string; count: string } {
 export const formatValue = (value: number): string =>
   value.toLocaleString('en-US', { maximumFractionDigits: Number.isInteger(value) ? 0 : 2 })
 
+// A share as a percent, one decimal under 10% and none where it would read `9.0%`.
+export const formatPercent = (share: number): string => `${Number((share * 100).toFixed(share < 0.1 ? 1 : 0))}%`
+
+// A series' legend name: its own, else its kind, numbered among the unnamed ones of that kind.
+export function seriesName(chart: XyChart, i: number): string {
+  const series = chart.series[i]
+
+  if (series === undefined || series.name !== '') {
+    return series?.name ?? ''
+  }
+
+  const same = chart.series.filter(other => other.kind === series.kind && other.name === '')
+
+  return same.length === 1 ? series.kind : `${series.kind} ${same.indexOf(series) + 1}`
+}
+
 // What reaches the model: one short paragraph, sent only while charts are on.
 export const CHART_HINT = [
   '# Charts',

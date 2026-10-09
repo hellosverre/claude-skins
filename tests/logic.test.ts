@@ -17,10 +17,10 @@ import { SKINS } from '../hooks/themes'
 import { inlineRuns, splitBlocks } from '../hooks/blocks'
 import { errorLine, isQuiet, isReadOnlyShell, segmentsOf } from '../hooks/quiet'
 import tokyoNight from '../hooks/themes/tokyo-night'
-import { chartHeading, niceStep, parseMermaid } from '../hooks/mermaid'
+import { chartHeading, formatPercent, niceStep, parseMermaid, seriesName } from '../hooks/mermaid'
 import type { Flow, Pie, XyChart } from '../hooks/mermaid'
 import { chartSvg } from '../hooks/svg-chart'
-import { blockBar } from '../hooks/chart-rows'
+import { blockBar, dotRule } from '../hooks/chart-rows'
 
 const NAMES = ['tokyo-night', 'dracula', 'nord']
 
@@ -534,6 +534,17 @@ test('a block bar fills to the eighth of a cell', async () => {
   expect(blockBar(1, 4)).toBe('████')
   expect(blockBar(0.5, 3)).toBe('█▌')
   expect(blockBar(0, 4)).toBe('')
+  expect(dotRule(1, 4)).toBe('───●')
+  expect(dotRule(0, 4)).toBe('●')
+})
+
+test('percents drop a trailing zero, and unnamed series are named by kind', async () => {
+  expect(formatPercent(0.09)).toBe('9%')
+  expect(formatPercent(0.095)).toBe('9.5%')
+  expect(formatPercent(0.65)).toBe('65%')
+
+  const chart = parseMermaid('xychart-beta\n  x-axis [a]\n  bar [1]\n  line [2]\n  line "Goal" [3]\n  line [4]') as XyChart
+  expect(chart.series.map((_, i) => seriesName(chart, i))).toEqual(['bar', 'line 1', 'Goal', 'line 2'])
 })
 
 test('splitReply can leave tables and turned-down fences as text', async () => {

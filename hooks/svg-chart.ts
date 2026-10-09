@@ -1,4 +1,4 @@
-import { chartHeading, formatValue, niceStep } from './mermaid'
+import { chartHeading, formatPercent, formatValue, niceStep, seriesName } from './mermaid'
 import type { Chart, Flow, FlowEdge, FlowNode, Pie, Shape, XyChart } from './mermaid'
 import type { Palette, Slot } from './skin'
 import { CONTROL_SLOT, escape, fitText, HEADER_MID, measure, riseDelay, svgCard } from './svg-kit'
@@ -318,7 +318,7 @@ function xyBody(chart: XyChart, palette: Palette, width: number): { body: string
     let x = x0
 
     for (const [i, series] of chart.series.entries()) {
-      const name = series.name || `${series.kind} ${i + 1}`
+      const name = seriesName(chart, i)
       parts.push(
         series.kind === 'line'
           ? `<line x1="${x}" y1="${height + 6}" x2="${x + 14}" y2="${height + 6}" stroke="${colorOf(series)}" stroke-width="2.2" stroke-linecap="round"/>`
@@ -382,7 +382,7 @@ function pieBody(pie: Pie, palette: Palette, width: number): { body: string; hei
 
   for (const [i, slice] of pie.slices.entries()) {
     const y = legendTop + i * LEGEND_ROW
-    const percent = `${((slice.value / total) * 100).toFixed(slice.value / total < 0.1 ? 1 : 0)}%`
+    const percent = formatPercent(slice.value / total)
     const value = formatValue(slice.value)
     const room = legendRight - legendX - 20 - measure(`${value}   ${percent}`, false, 12) - 16
 

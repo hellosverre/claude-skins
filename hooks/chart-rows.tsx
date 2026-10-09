@@ -1,4 +1,4 @@
-import { chartHeading, formatValue } from './mermaid'
+import { chartHeading, formatPercent, formatValue, seriesName } from './mermaid'
 import type { Chart, Flow, FlowEdge, Pie, XyChart } from './mermaid'
 import { cutCell, widthOf } from './markdown'
 import type { Look } from './rows'
@@ -8,6 +8,8 @@ import type { Slot } from './skin'
 // links between them spelled out, bar, line and pie charts as rows of block bars.
 
 const SHAPE_SLOT = { box: 'user', round: 'read', diamond: 'warn' } as const
+// The border tells the shapes apart where a skin's colours are close.
+const SHAPE_BORDER = { box: 'single', round: 'round', diamond: 'double' } as const
 const SERIES: readonly Slot[] = ['user', 'read', 'ok', 'warn', 'web', 'mcp', 'search', 'err']
 const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉']
 const LABEL_MAX = 24
@@ -50,10 +52,11 @@ const edgeText = (flow: Flow, edge: FlowEdge): string =>
 function nodeBox(look: Look, flow: Flow, id: string) {
   const { Box, Text } = look.ui
   const node = flow.nodes.find(other => other.id === id)
-  const color = look.skin.palette[SHAPE_SLOT[node?.shape ?? 'box']]
+  const shape = node?.shape ?? 'box'
+  const color = look.skin.palette[SHAPE_SLOT[shape]]
 
   return (
-    <Box borderStyle="round" borderColor={color} paddingX={1} flexShrink={0}>
+    <Box borderStyle={SHAPE_BORDER[shape]} borderColor={color} paddingX={1} flexShrink={0}>
       <Text color={look.skin.palette.fg}>{cutCell(node?.label ?? id, LABEL_MAX)}</Text>
     </Box>
   )
@@ -121,7 +124,9 @@ function loopRows(look: Look, flow: Flow, loops: readonly FlowEdge[]) {
 
 // --- Bar, line and pie charts -------------------------------------------------------
 
-type BarRow = { label: string; value: number; color: string; note?: string }
+// `line` draws the value as a dot on a rule, so a line series reads apart from the bars;
+// `text` replaces the value column.
+type BarRow = { label: string; value: number; color: string; line?: boolean; text?: string }
 
 // One row per value: label, bar, value. Bars run from zero; a chart with negative values
 // draws their magnitude, the value beside it carrying the sign.
@@ -129,23 +134,28 @@ function barRows(look: Look, rows: readonly BarRow[], maxWidth: number) {
   const { Box, Text } = look.ui
   const { palette } = look.skin
   const labelWidth = Math.min(LABEL_MAX, Math.max(...rows.map(row => widthOf(row.label))))
-  const valueWidth = Math.max(...rows.map(row => widthOf(formatValue(row.value) + (row.note ?? ''))))
+  const valueOf = (row: BarRow) => row.text ?? formatValue(row.value)
+  const valueWidth = Math.max(...rows.map(row => widthOf(valueOf(row))))
   const peak = Math.max(...rows.map(row => Math.abs(row.value)), Number.MIN_VALUE)
   const cells = Math.max(4, Math.min(48, maxWidth - labelWidth - valueWidth - 6))
 
   return rows.map(row => (
     <Box flexDirection="row">
       <Text color={palette.fg}>{`${cutCell(row.label, labelWidth)}${' '.repeat(labelWidth - widthOf(cutCell(row.label, labelWidth)))}  `}</Text>
-      <Text color={row.color}>{blockBar(Math.abs(row.value) / peak, cells)}</Text>
-      <Text color={palette.muted}>
-        {` ${formatValue(row.value)}`}
-        {row.note ?? ''}
-      </Text>
+      <Text color={row.color}>{row.line === true ? dotRule(Math.abs(row.value) / peak, cells) : blockBar(Math.abs(row.value) / peak, cells)}</Text>
+      <Text color={palette.muted}>{` ${valueOf(row)}`}</Text>
     </Box>
   ))
 }
 
-function legend(look: Look, names: readonly { name: string; color: string }[]) {
+// A line series' value: a rule out to a dot, `share` of `cells` along.
+export function dotRule(share: number, cells: number): string {
+  const at = Math.max(1, Math.round(Math.max(0, Math.min(1, share)) * cells))
+
+  return `${'─'.repeat(at - 1)}●`
+}
+
+function legend(look: Look, names: readonly { name: string; color: string; mark: string }[]) {
   const { Text } = look.ui
 
   return (
@@ -153,7 +163,7 @@ function legend(look: Look, names: readonly { name: string; color: string }[]) {
       {names.map((entry, i) => (
         <Text>
           {i === 0 ? '' : '   '}
-          <Text color={entry.color}>■</Text>
+          <Text color={entry.color}>{entry.mark}</Text>
           {` ${entry.name}`}
         </Text>
       ))}
@@ -168,7 +178,7 @@ function xyRows(look: Look, chart: XyChart, maxWidth: number) {
     chart.series.flatMap((series, j) => {
       const value = series.values[i]
 
-      return value === undefined ? [] : [{ label: many && j > 0 ? '' : label, value, color: seriesColor(look, j) }]
+      return value === undefined ? [] : [{ label: many && j > 0 ? '' : label, value, color: seriesColor(look, j), line: series.kind === 'line' }]
     }),
   )
 
@@ -176,7 +186,7 @@ function xyRows(look: Look, chart: XyChart, maxWidth: number) {
     <Box flexDirection="column">
       {chart.yLabel === '' ? '' : <Text color={look.skin.palette.muted}>{chart.yLabel}</Text>}
       {barRows(look, rows, maxWidth)}
-      {many ? legend(look, chart.series.map((series, j) => ({ name: series.name || `${series.kind} ${j + 1}`, color: seriesColor(look, j) }))) : ''}
+      {many ? legend(look, chart.series.map((series, j) => ({ name: seriesName(chart, j), color: seriesColor(look, j), mark: series.kind === 'line' ? '─●' : '■' }))) : ''}
     </Box>
   )
 }
@@ -184,10 +194,11 @@ function xyRows(look: Look, chart: XyChart, maxWidth: number) {
 function pieRows(look: Look, pie: Pie, maxWidth: number) {
   const { Box } = look.ui
   const total = pie.slices.reduce((sum, slice) => sum + slice.value, 0)
+  // Values that already sum to 100 are their own percents.
   const rows = pie.slices.map((slice, i) => {
-    const share = slice.value / total
+    const percent = formatPercent(slice.value / total)
 
-    return { label: slice.label, value: slice.value, color: seriesColor(look, i), note: `  ${(share * 100).toFixed(share < 0.1 ? 1 : 0)}%` }
+    return { label: slice.label, value: slice.value, color: seriesColor(look, i), text: total === 100 ? percent : `${formatValue(slice.value)}  ${percent}` }
   })
 
   return <Box flexDirection="column">{barRows(look, rows, maxWidth)}</Box>

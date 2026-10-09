@@ -441,7 +441,23 @@ test('a Mermaid fence is a chart card on the desktop and boxes in the terminal',
   await terminal.unmount()
 
   const bars = await $.ui.mount(chartReply('terminal', '```mermaid\npie title Pets\n  "Dogs" : 3\n  "Cats" : 1\n```'))
-  expect(await bars.find({ type: 'Text', text: '75%' })).toBeDefined()
+  expect(await bars.find({ type: 'Text', text: '3  75%' })).toBeDefined()
+  await bars.unmount()
+
+  // Shares that already sum to 100 show once; a line series is a dot on a rule; a decision
+  // keeps a border of its own.
+  const shares = await $.ui.mount(chartReply('terminal', '```mermaid\npie\n  "a" : 91\n  "b" : 9\n```'))
+  expect(await shares.find({ type: 'Text', text: '9%' })).toBeDefined()
+  await shares.unmount()
+
+  const lines = await $.ui.mount(chartReply('terminal', '```mermaid\nxychart-beta\n  x-axis [a, b]\n  bar [2, 4]\n  line [1, 4]\n```'))
+  expect(await lines.find({ type: 'Text', text: '■ bar' })).toBeDefined()
+  await lines.unmount()
+
+  const decision = await $.ui.mount(chartReply('terminal', '```mermaid\nflowchart TD\n  A[Go] --> B{Ok?}\n```'))
+  const borders = (await decision.findAll({ type: 'Box' })).map(box => box.props.borderStyle)
+  expect(borders).toContain('double')
+  expect(borders).toContain('single')
 })
 
 test('with charts off, or Mermaid the parser cannot read, the fence keeps its code drawing', async ($, on) => {
