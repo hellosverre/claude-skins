@@ -36,7 +36,13 @@ const alignOf = (cell: string): Align => {
 const fit = (cells: string[], width: number): string[] =>
   Array.from({ length: width }, (_, i) => cells[i] ?? '')
 
-export function splitReply(markdown: string): Segment[] {
+// `tables` off leaves tables as text; a fence `fence` turns down stays text too, so a
+// reply can be split for its charts alone.
+export type SplitOptions = { tables: boolean; fence: (lang: string, code: string) => boolean }
+
+const SPLIT_ALL: SplitOptions = { tables: true, fence: () => true }
+
+export function splitReply(markdown: string, options: SplitOptions = SPLIT_ALL): Segment[] {
   const lines = markdown.split('\n')
   const segments: Segment[] = []
   let text: string[] = []
@@ -61,13 +67,17 @@ export function splitReply(markdown: string): Segment[] {
       const close = lines.findIndex((other, j) => j > i && FENCE.test(other) && other.trim().replace(/[`~]/g, '') === '')
 
       if (close !== -1) {
+        const lang = (fence[2] ?? '').toLowerCase()
+        const code = lines.slice(i + 1, close).join('\n')
+
+        if (!options.fence(lang, code)) {
+          text.push(...lines.slice(i, close + 1))
+          i = close
+          continue
+        }
+
         flush()
-        segments.push({
-          kind: 'code',
-          lang: (fence[2] ?? '').toLowerCase(),
-          code: lines.slice(i + 1, close).join('\n'),
-          raw: lines.slice(i, close + 1).join('\n'),
-        })
+        segments.push({ kind: 'code', lang, code, raw: lines.slice(i, close + 1).join('\n') })
         i = close
         continue
       }
@@ -79,6 +89,7 @@ export function splitReply(markdown: string): Segment[] {
 
     const header = cellsOf(line)
     const isTable =
+      options.tables &&
       !inFence &&
       line.includes('|') &&
       SEPARATOR.test(next) &&

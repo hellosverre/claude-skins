@@ -5,10 +5,14 @@ import { formatDuration, formatMs } from './format'
 import { columnWidths, cutCell } from './markdown'
 import type { Segment, Table } from './markdown'
 import { splitBlocks } from './blocks'
+import { chartRows } from './chart-rows'
+import { parseMermaid } from './mermaid'
+import type { Chart } from './mermaid'
 import { blockRows } from './prose'
 import type { Icons, Kind, Skin } from './skin'
 import { spinnerIcon, toolIcon } from './icons'
 import type { SpinnerMode } from './icons'
+import { chartSvg } from './svg-chart'
 import { codeSvg } from './svg-code'
 import { diffSvg } from './svg-diff'
 import type { DiffInput } from './svg-diff'
@@ -397,6 +401,19 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
         }
 
         if (segment.kind === 'code') {
+          const chart = segment.lang === 'mermaid' && look.prefs.charts ? parseMermaid(segment.code) : null
+
+          if (chart !== null) {
+            return Svg === undefined ? (
+              <Box flexDirection="column">
+                {chartRows(look, chart, maxWidth)}
+                {copyRow(look, `copy-${i}`, segment.code)}
+              </Box>
+            ) : (
+              chartCard(look, chart, segment.code, Svg, maxWidth, `copy-${i}`)
+            )
+          }
+
           return Svg === undefined ? (
             <Box flexDirection="column">
               <Markdown text={segment.raw} />
@@ -502,6 +519,13 @@ function card(look: Look, Svg: SvgElement, built: { source: string; alt: string 
 
 export function codeCard(look: Look, lang: string, code: string, Svg: SvgElement, columns: number, key = 'copy-code') {
   return cardWithCopy(look, Svg, codeSvg(code, lang, look.skin.palette, cardWidth(columns), look.copy !== undefined), key, code)
+}
+
+// A chart too crowded to draw at this width keeps its source as a code card.
+function chartCard(look: Look, chart: Chart, source: string, Svg: SvgElement, columns: number, key: string) {
+  const built = chartSvg(chart, look.skin.palette, cardWidth(columns), look.copy !== undefined)
+
+  return built === null ? codeCard(look, 'mermaid', source, Svg, columns, key) : cardWithCopy(look, Svg, built, key, source)
 }
 
 export function diffCard(look: Look, Svg: SvgElement, input: DiffInput, shownPath: string, columns: number) {

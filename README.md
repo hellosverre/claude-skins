@@ -55,6 +55,7 @@ Needs Claude Code 2.1.287 or later, in a terminal or the desktop app's Code tab.
 | Tables in replies | An animated card: header rule, zebra rows, swatches for colours, coloured diffs; Copy gives the markdown | A cell grid with a header band and zebra rows, and the same Copy |
 | Alerts and task lists in replies | `> [!NOTE]` and its kin as a coloured, titled box; `- [ ]` lists with ticks and a done count | The same |
 | Prose in replies | Claude Code's own markdown | Headings with a mark, and numbers, versions, paths and durations picked out in the skin's colours; links and anything unusual stay Claude Code's |
+| Charts in replies (on by default) | A ` ```mermaid ` flowchart, `xychart-beta` or `pie` drawn as a card in the skin's colours, nodes and bars rising in; Copy gives the source. Claude is told it can answer with one | Boxes rank by rank with the links spelled out, and block bars for charts and pies |
 | Code blocks in replies | A card with the language, line numbers and highlighting, and a Copy button | Claude Code's own markdown, and a Copy button |
 | Spinner | An animated icon per phase: thinking, tool use, writing, waiting | The skin's word with a band of light through it |
 | Above the prompt | Rings for context and each plan limit, a Compact button, and a nudge to compact from 70% context | Block meters and the same button |
@@ -73,11 +74,11 @@ Set `SKINS_THEME=light` or `SKINS_THEME=dark` to choose yourself, for example wh
 ## Make it yours
 
 - **`/skin`** opens the settings: pick a skin, see a live preview, switch the rail, tables, shimmer,
-  band, markdown, quiet output and icons, and repaint any colour. Repainting a built-in skin saves it as your own `my-<skin>`.
+  band, markdown, quiet output, charts and icons, and repaint any colour. Repainting a built-in skin saves it as your own `my-<skin>`.
 - **`/skin gallery`** shows every element the skin draws, numbered, to point at when you want one changed.
 - **Ask your agent.** The mod gives Claude a `design` tool and a short guide, so "make me a skin that
   feels like a sunset" builds one and applies it while you watch.
-- **`/skin <name>`**, `/skin list`, `/skin off`, and `/skin rail|tables|shimmer|band|clip|markdown|quiet on|off` for quick switches.
+- **`/skin <name>`**, `/skin list`, `/skin off`, and `/skin rail|tables|shimmer|band|clip|markdown|quiet|charts on|off` for quick switches.
 - **`/skin copy`** puts Claude's last reply on the clipboard; **`/skin copy code`** just its last code block.
 - **`/skin pin`** gives this folder a look of its own: later changes here stay here. **`/skin unpin`**
   returns it to the default, and **`/skin share`** makes this folder's look the default for the rest.

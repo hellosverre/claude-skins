@@ -420,6 +420,61 @@ test('a code fence is a card on the desktop and stays markdown in the terminal',
   expect(await terminal.find({ type: 'Markdown' })).toBeDefined()
 })
 
+const FLOW = 'Steps:\n\n```mermaid\nflowchart TD\n  A[Plan] --> B[Build]\n  B -->|ship| C[Live]\n```'
+
+const chartReply = (surface: (typeof SURFACES)[number], text = FLOW) =>
+  ({ ...SITE, surface, component: 'AssistantMessage', requestId: 'm1', props: { text, isFirstOfReply: true } }) as const
+
+test('a Mermaid fence is a chart card on the desktop and boxes in the terminal', async ($, on) => {
+  stubEngine(on)
+
+  const desktop = await $.ui.mount(chartReply('desktop'))
+  const card = (await desktop.find({ type: 'Svg' })) as { props: { source: string; alt: string } } | undefined
+  expect(card?.props.source).toContain('FLOWCHART')
+  expect(card?.props.alt).toContain('Build → Live (ship)')
+  await desktop.unmount()
+
+  const terminal = await $.ui.mount(chartReply('terminal'))
+  expect(await terminal.find({ type: 'Svg' })).toBeUndefined()
+  expect(await terminal.find({ type: 'Text', text: 'Plan' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '↓  ship' })).toBeDefined()
+  await terminal.unmount()
+
+  const bars = await $.ui.mount(chartReply('terminal', '```mermaid\npie title Pets\n  "Dogs" : 3\n  "Cats" : 1\n```'))
+  expect(await bars.find({ type: 'Text', text: '75%' })).toBeDefined()
+})
+
+test('with charts off, or Mermaid the parser cannot read, the fence keeps its code drawing', async ($, on) => {
+  stubEngine(on)
+
+  const unread = await $.ui.mount(chartReply('desktop', '```mermaid\nsequenceDiagram\n  A->>B: hi\n```'))
+  expect(((await unread.find({ type: 'Svg' })) as { props: { source: string } } | undefined)?.props.source).toContain('sequenceDiagram')
+  await unread.unmount()
+
+  await runSkin($, 'tables off')
+  const tablesOff = await $.ui.mount(chartReply('terminal'))
+  expect(await tablesOff.find({ type: 'Text', text: 'Plan' })).toBeDefined()
+  await tablesOff.unmount()
+
+  await runSkin($, 'charts off')
+  const off = await $.ui.mount(chartReply('desktop'))
+  expect(await off.find({ type: 'Svg' })).toBeUndefined()
+})
+
+test('while charts are on, the system prompt tells Claude it can answer with one', async ($, on) => {
+  stubEngine(on)
+  on('prompt.compose', () => ({ sections: [{ id: 'base', text: 'You are Claude.', scope: 'shared' as const }] }))
+
+  const compose = (traits: readonly string[] = []) =>
+    $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: traits as never })
+
+  expect((await compose()).sections.map(section => section.id)).toEqual(['base', 'skins:charts'])
+  expect((await compose(['print'])).sections.map(section => section.id)).toEqual(['base'])
+
+  await runSkin($, 'charts off')
+  expect((await compose()).sections.map(section => section.id)).toEqual(['base'])
+})
+
 const BAND = (surface: (typeof SURFACES)[number], isWorking: boolean) =>
   ({
     ...SITE,

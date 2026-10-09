@@ -12,6 +12,7 @@ import { clipLines, diffstat, pick } from './format'
 import { drawsBlocks, hasBlocks } from './blocks'
 import { copyOf, splitReply } from './markdown'
 import type { Segment } from './markdown'
+import { CHART_HINT, parseMermaid } from './mermaid'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
@@ -228,7 +229,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | copy | copy code | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | icons]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -542,6 +543,20 @@ reply width: ${lastColumns} columns`
     return promptRow(look, e.props.text, hasImages ? await next({ ...e, props: { ...e.props, text: '' } }) : undefined)
   })
 
+  // While charts are drawn, the model learns it can answer a "show me" with a Mermaid
+  // fence. Nothing for a headless run, which draws nothing.
+  on('prompt.compose', async ($, e, next) => {
+    const result = await next(e)
+    const active = await activeSkin($)
+    const isHeadless = e.surfaces.length === 0 || e.traits.includes('bare') || e.traits.includes('print')
+
+    if (active === null || !active.prefs.charts || isHeadless) {
+      return result
+    }
+
+    return { sections: [...result.sections, { id: 'skins:charts', text: CHART_HINT, scope: 'session' as const }] }
+  })
+
   // A reply keeps Claude Code's own drawing unless it holds a card or markdown the pack draws.
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const active = await activeSkin($)
@@ -556,12 +571,15 @@ reply width: ${lastColumns} columns`
     const cards = prefs.tables && /\||```|~~~/.test(text)
     // The terminal draws every paragraph itself; elsewhere only alerts and task lists.
     const blocks = prefs.markdown && (e.surface === 'terminal' || hasBlocks(text))
+    // With cards off, a Mermaid fence the parser reads is still split out to draw.
+    const charts = prefs.charts && /mermaid/i.test(text)
 
-    if (!cards && !blocks) {
+    if (!cards && !blocks && !charts) {
       return next(e)
     }
 
-    const segments: Segment[] = cards ? splitReply(text) : [{ kind: 'text', text }]
+    const charted = (lang: string, code: string) => lang === 'mermaid' && parseMermaid(code) !== null
+    const segments: Segment[] = cards ? splitReply(text) : charts ? splitReply(text, { tables: false, fence: charted }) : [{ kind: 'text', text }]
     const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
     const drawn = segments.some(segment => segment.kind !== 'text' || (prefs.markdown && drawsBlocks(segment.text, e.surface)))
 

@@ -28,6 +28,7 @@ export type Prefs = {
   clipOutput: boolean
   markdown: boolean
   quiet: boolean
+  charts: boolean
 }
 
 // A skin someone made in the settings pane or through their agent: a built-in skin

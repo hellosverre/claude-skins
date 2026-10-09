@@ -17,6 +17,10 @@ import { SKINS } from '../hooks/themes'
 import { inlineRuns, splitBlocks } from '../hooks/blocks'
 import { errorLine, isQuiet, isReadOnlyShell, segmentsOf } from '../hooks/quiet'
 import tokyoNight from '../hooks/themes/tokyo-night'
+import { chartHeading, niceStep, parseMermaid } from '../hooks/mermaid'
+import type { Flow, Pie, XyChart } from '../hooks/mermaid'
+import { chartSvg } from '../hooks/svg-chart'
+import { blockBar } from '../hooks/chart-rows'
 
 const NAMES = ['tokyo-night', 'dracula', 'nord']
 
@@ -460,4 +464,82 @@ test('/skin copy takes the whole reply, or with code its last code block', async
   expect(copyOf(reply, true)).toEqual({ text: 'pnpm build' })
   expect(copyOf('No code here.', true)).toEqual({ message: 'No code block in the last reply' })
   expect(copyOf('  \n', false)).toEqual({ message: 'Nothing to copy yet' })
+})
+
+test('a Mermaid flowchart parses into ranked nodes, shapes and labelled edges', async () => {
+  const flow = parseMermaid('flowchart TD\n  A[Start] --> B{Ok?}\n  B -->|yes| C([Done])\n  B -. no .-> A\n  %% a comment\n  classDef x fill:#f00') as Flow
+
+  expect(flow.kind).toBe('flow')
+  expect(flow.direction).toBe('down')
+  expect(flow.nodes.map(node => [node.id, node.label, node.shape])).toEqual([
+    ['A', 'Start', 'box'],
+    ['B', 'Ok?', 'diamond'],
+    ['C', 'Done', 'round'],
+  ])
+  expect(flow.ranks).toEqual([['A'], ['B'], ['C']])
+  expect(flow.edges[1]?.label).toBe('yes')
+  expect(flow.back.map(edge => [edge.from, edge.to, edge.line, edge.label])).toEqual([['B', 'A', 'dotted', 'no']])
+  expect((parseMermaid('graph LR; a-->b; b==>c') as Flow).direction).toBe('right')
+})
+
+test('Mermaid the cards cannot draw faithfully parses to nothing', async () => {
+  expect(parseMermaid('sequenceDiagram\n  A->>B: hi')).toBeNull()
+  expect(parseMermaid('flowchart TD\n  subgraph one\n  A --> B\n  end')).toBeNull()
+  expect(parseMermaid('flowchart TD\n  A --> B\n  this is not mermaid')).toBeNull()
+  expect(parseMermaid('flowchart TD')).toBeNull()
+})
+
+test('an xychart parses its axes and series, and picks a y range when none is given', async () => {
+  const chart = parseMermaid('xychart-beta\n  title "Sales"\n  x-axis [jan, feb, mar]\n  y-axis "Revenue"\n  bar [5, 12, 7]\n  line "Trend" [4, 9, 10]') as XyChart
+
+  expect(chart.title).toBe('Sales')
+  expect(chart.labels).toEqual(['jan', 'feb', 'mar'])
+  expect(chart.yLabel).toBe('Revenue')
+  expect(chart.series.map(series => [series.kind, series.name, series.values])).toEqual([
+    ['bar', '', [5, 12, 7]],
+    ['line', 'Trend', [4, 9, 10]],
+  ])
+  expect(chart.min).toBe(0)
+  expect(chart.max).toBeGreaterThanOrEqual(12)
+  expect(chartHeading(chart)).toEqual({ kind: 'Chart', count: '2 series' })
+  expect(niceStep(100)).toBe(25)
+})
+
+test('a pie parses its slices, and its heading counts them', async () => {
+  const pie = parseMermaid('pie title Pets\n  "Dogs" : 386\n  "Cats" : 85.5') as Pie
+
+  expect(pie.title).toBe('Pets')
+  expect(pie.slices).toEqual([
+    { label: 'Dogs', value: 386 },
+    { label: 'Cats', value: 85.5 },
+  ])
+  expect(chartHeading(pie)).toEqual({ kind: 'Pie', count: '2 slices' })
+})
+
+test('chart cards draw in the skin, and a flowchart too wide for its card is left to the code card', async () => {
+  const palette = tokyoNight.palette
+  const flow = chartSvg(parseMermaid('flowchart TD\n  A[Plan] --> B[Build]\n  B --> A') as Flow, palette, 640)
+  const pie = chartSvg(parseMermaid('pie\n  "a" : 1') as Pie, palette, 640)
+  const wide = parseMermaid(`flowchart TD\n${Array.from({ length: 12 }, (_, i) => `  R --> N${i}[Node ${i}]`).join('\n')}`) as Flow
+
+  expect(flow?.source).toContain('Plan')
+  expect(flow?.source).toContain('marker-end')
+  expect(flow?.source).toContain(palette.user)
+  expect(flow?.alt).toContain('Build → Plan')
+  expect(pie?.source).toContain('<circle')
+  expect(chartSvg(wide, palette, 480)).toBeNull()
+})
+
+test('a block bar fills to the eighth of a cell', async () => {
+  expect(blockBar(1, 4)).toBe('████')
+  expect(blockBar(0.5, 3)).toBe('█▌')
+  expect(blockBar(0, 4)).toBe('')
+})
+
+test('splitReply can leave tables and turned-down fences as text', async () => {
+  const reply = '| a | b |\n|---|---|\n| 1 | 2 |\n\n```ts\nx\n```\n\n```mermaid\npie\n  "a" : 1\n```'
+  const segments = splitReply(reply, { tables: false, fence: lang => lang === 'mermaid' })
+
+  expect(segments.map(segment => segment.kind)).toEqual(['text', 'code'])
+  expect(segments[0]?.kind === 'text' && segments[0].text).toContain('```ts')
 })
