@@ -11,9 +11,9 @@
   <img alt="Claude Code 2.1.287+" src="https://img.shields.io/badge/Claude%20Code-2.1.287%2B-555?style=flat-square">
 </p>
 
-<p align="center">Tool calls with icons and timings, edits as diff cards, tables and code as cards,<br>a live usage band, and seven skins you can repaint or have Claude design for you.</p>
+<p align="center">Tool calls with icons and timings, edits as diff cards, tables, code and Mermaid charts as cards,<br>a live usage band, and fifteen skins you can repaint or have Claude design for you.</p>
 
-<img alt="The same Claude Code turn switching skins with /skin: noir, Tokyo Night, Dracula, Catppuccin" src="docs/demo.gif">
+<img alt="Claude Code switching skins with /skin: a coding turn in Noir and Tokyo Night, then Mermaid chart cards in Dracula (xy chart), Catppuccin (sankey), Rosé Pine (radar) and Gruvbox (treemap)" src="docs/demo.gif">
 
 ## Install
 
@@ -56,10 +56,11 @@ To keep it installed but go back to Claude Code's own drawing, run `/skin off`.
 | Command | What it does |
 |---|---|
 | `/skin` | Settings: pick a skin with a live preview, toggle parts, repaint any colour |
-| `/skin <name>` | Switch skin: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `nord`, `gruvbox`, `mono` |
+| `/skin <name>` | Switch skin: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `rose-pine`, `nord`, `gruvbox`, `kanagawa`, `everforest`, `one-dark`, `solarized`, `night-owl`, `ayu`, `github`, `mono` |
 | `/skin list` | Every skin, yours included |
 | `/skin off` | Back to Claude Code's own drawing |
-| `/skin rail\|shimmer\|band\|clip on\|off` | Toggle one part |
+| `/skin rail\|shimmer\|band\|clip\|markdown\|quiet\|charts on\|off` | Toggle one part |
+| `/skin copy` · `copy code` | Copy Claude's last reply, or just its last code block |
 | `/skin tables on\|text\|off` | `text` draws tables and code as selectable text on the desktop |
 | `/skin gallery` | Every element the skin draws, numbered, to point at |
 | `/skin pin` · `unpin` · `share` | Give this folder its own look, drop it, or make it the default |
@@ -104,7 +105,10 @@ Drawn by the mod's own card code (`scripts/previews.ts`), not screenshots.
 | Tool calls | Icon per kind, spinner while running, lines changed, time taken | A node on the turn's rail |
 | Edits | Diff card with `+N −M` and numbered lines | Claude Code's own diff |
 | Shell commands | Terminal card with status, stderr apart, long output folded | Claude Code's own output |
+| Quiet output (off by default) | Reads, searches and read-only commands fold to one row; a failure keeps its error line | The same |
 | Tables | Card with header rule, zebra rows, colour swatches | Cell grid with a header band |
+| Charts | ` ```mermaid ` as a card: flowchart, xy, pie, gantt, timeline, journey, kanban, mindmap, quadrant, radar, sankey, gitGraph, treemap, packet, block, architecture, C4 | The same seventeen drawn in cells, ASCII with `/skin icons ascii` |
+| Alerts and task lists | `> [!NOTE]` as a titled box, `- [ ]` with ticks and a done count | The same |
 | Code blocks | Card with language, line numbers, highlighting; shell blocks keep the Run button | Claude Code's own markdown |
 | Spinner | Animated icon per phase | The skin's word with a band of light |
 | Above the prompt | Context and plan-limit rings, Compact button, nudge at 70% | Block meters, same button |
@@ -125,6 +129,15 @@ Its one network call is the daily version check: a GET of this repo's
 [`plugin.json`](.claude-plugin/plugin.json) on `raw.githubusercontent.com`, sending nothing. On `auto`
 it asks the OS for light or dark mode (`defaults` on macOS, `gsettings` on GNOME). It compacts or
 copies only when you press the button. Check it yourself with `claude plugin validate .`.
+
+## Vendored code
+
+Terminal diagrams are laid out by [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid)
+(MIT), bundled into `hooks/vendor/mermaid-ascii.js` with its licence in the header. To rebuild it:
+
+```bash
+cd scripts/vendor && npm install && npm run build
+```
 
 ## Develop
 

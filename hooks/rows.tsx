@@ -4,9 +4,17 @@ import type { Prefs, TurnStats } from '../types'
 import { formatDuration, formatMs } from './format'
 import { columnWidths, cutCell, isShell } from './markdown'
 import type { Segment, Table } from './markdown'
+import { splitBlocks } from './blocks'
+import { artRows, chartRows } from './chart-rows'
+import { chartArt } from './chart-art'
+import { chartHeading, parseMermaid } from './mermaid'
+import { mermaidArt } from './mermaid-art'
+import type { Chart } from './mermaid'
+import { blockRows } from './prose'
 import type { Icons, Kind, Skin } from './skin'
 import { spinnerIcon, toolIcon } from './icons'
 import type { SpinnerMode } from './icons'
+import { chartSvg } from './svg-chart'
 import { codeSvg } from './svg-code'
 import { diffSvg } from './svg-diff'
 import type { DiffInput } from './svg-diff'
@@ -175,7 +183,7 @@ function iconRow(look: Look, Svg: SvgElement, kind: Kind, calls: readonly Call[]
   )
 }
 
-export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta: Meta) {
+export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta: Meta, label = toolLabel(call.tool)) {
   const { Text } = look.ui
   const { palette } = look.skin
 
@@ -183,7 +191,7 @@ export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta
     const line = (
       <Text wrap="truncate-end">
         <Text color={palette[kind]} bold>
-          {toolLabel(call.tool)}
+          {label}
         </Text>
         <Text color={call.isErrored ? palette.err : palette.muted}>{`  ${target}`}</Text>
       </Text>
@@ -195,12 +203,23 @@ export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta
   const main = (
     <Text wrap="truncate-end">
       {node(look, [call])}
-      <Text color={palette[kind]}>{toolLabel(call.tool)}</Text>
+      <Text color={palette[kind]}>{label}</Text>
       <Text color={call.isErrored ? palette.err : palette.muted}>{`  ${target}`}</Text>
     </Text>
   )
 
   return stack(look, withMeta(look, main, meta))
+}
+
+// A quiet call's result: nothing when it worked, the one line that says why when it failed.
+export function quietResult(look: Look, failure: string | null) {
+  const { Box, Text } = look.ui
+
+  return failure === null ? (
+    <Box />
+  ) : (
+    <Text color={look.skin.palette.err} wrap="truncate-end">{`${look.prefs.icons === 'ascii' ? 'x' : '✖'} ${failure}`}</Text>
+  )
 }
 
 // A run of reads and searches on one node: `●─ Read 3 · Search 2`.
@@ -383,7 +402,11 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
     <Box flexDirection="column">
       {segments.map((segment, i) => {
         if (segment.kind === 'text') {
-          return <Markdown text={segment.text} />
+          return look.prefs.markdown ? (
+            <Box flexDirection="column">{blockRows(look, splitBlocks(segment.text, { prose: look.surface === 'terminal' }))}</Box>
+          ) : (
+            <Markdown text={segment.text} />
+          )
         }
 
         // A shell fence on the desktop stays the app's own block, which has Run and Copy.
@@ -392,6 +415,37 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
         }
 
         if (segment.kind === 'code') {
+          const chart = segment.lang === 'mermaid' && look.prefs.charts ? parseMermaid(segment.code) : null
+          const ascii = look.prefs.icons === 'ascii'
+          // The terminal lays diagrams out in two dimensions: the kinds we parse in our own
+          // drawings, flowcharts, xy charts and the kinds we do not parse in the vendored one.
+          const ours = Svg === undefined && chart !== null ? chartArt(chart, maxWidth, ascii) : null
+          const vendored = Svg === undefined && segment.lang === 'mermaid' && look.prefs.charts && (chart === null || chart.kind === 'flow' || chart.kind === 'xy')
+          const art = ours ?? (vendored ? mermaidArt(segment.code, maxWidth, ascii) : null)
+
+          if (art !== null) {
+            return (
+              <Box flexDirection="column">
+                {artRows(look, art, chart === null ? '' : chartHeading(chart).count)}
+                {copyRow(look, `copy-${i}`, segment.code)}
+              </Box>
+            )
+          }
+
+          if (chart !== null && Svg !== undefined) {
+            return chartCard(look, chart, segment.code, Svg, maxWidth, `copy-${i}`)
+          }
+
+          // A terminal too narrow for a drawing falls back to rows, or to the code.
+          if (chart !== null && (chart.kind === 'flow' || chart.kind === 'xy' || chart.kind === 'pie')) {
+            return (
+              <Box flexDirection="column">
+                {chartRows(look, chart, maxWidth)}
+                {copyRow(look, `copy-${i}`, segment.code)}
+              </Box>
+            )
+          }
+
           return Svg === undefined ? (
             <Box flexDirection="column">
               <Markdown text={segment.raw} />
@@ -497,6 +551,13 @@ function card(look: Look, Svg: SvgElement, built: { source: string; alt: string 
 
 export function codeCard(look: Look, lang: string, code: string, Svg: SvgElement, columns: number, key = 'copy-code') {
   return cardWithCopy(look, Svg, codeSvg(code, lang, look.skin.palette, cardWidth(columns), look.copy !== undefined), key, code)
+}
+
+// A chart too crowded to draw at this width keeps its source as a code card.
+function chartCard(look: Look, chart: Chart, source: string, Svg: SvgElement, columns: number, key: string) {
+  const built = chartSvg(chart, look.skin.palette, cardWidth(columns), look.copy !== undefined)
+
+  return built === null ? codeCard(look, 'mermaid', source, Svg, columns, key) : cardWithCopy(look, Svg, built, key, source)
 }
 
 export function diffCard(look: Look, Svg: SvgElement, input: DiffInput, shownPath: string, columns: number) {

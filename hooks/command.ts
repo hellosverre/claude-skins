@@ -8,6 +8,9 @@ export const DEFAULT_PREFS: Prefs = {
   shimmer: true,
   band: true,
   clipOutput: false,
+  markdown: true,
+  quiet: false,
+  charts: true,
 }
 
 // The on/off settings, by the word /skin and the settings pane use for each. Tables have a
@@ -17,6 +20,9 @@ export const TOGGLES = {
   shimmer: 'shimmer',
   band: 'band',
   clip: 'clipOutput',
+  markdown: 'markdown',
+  quiet: 'quiet',
+  charts: 'charts',
 } as const satisfies Record<string, keyof Prefs>
 
 export type ToggleWord = keyof typeof TOGGLES
@@ -62,6 +68,9 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
     shimmer: flagOr(saved.shimmer, DEFAULT_PREFS.shimmer),
     band: flagOr(saved.band, DEFAULT_PREFS.band),
     clipOutput: flagOr(saved.clipOutput, DEFAULT_PREFS.clipOutput),
+    markdown: flagOr(saved.markdown, DEFAULT_PREFS.markdown),
+    quiet: flagOr(saved.quiet, DEFAULT_PREFS.quiet),
+    charts: flagOr(saved.charts, DEFAULT_PREFS.charts),
   }
 }
 
@@ -82,6 +91,9 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
       `shimmer ${onOff(current.shimmer)}`,
       `band ${onOff(current.band)}`,
       `clip ${onOff(current.clipOutput)}`,
+      `markdown ${onOff(current.markdown)}`,
+      `quiet ${onOff(current.quiet)}`,
+      `charts ${onOff(current.charts)}`,
     ].join(' · '),
   ].join('\n')
 

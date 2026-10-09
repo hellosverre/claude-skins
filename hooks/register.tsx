@@ -9,8 +9,12 @@ import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
 import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
 import { clipLines, diffstat, pick } from './format'
-import { isShell, splitReply } from './markdown'
-import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, replyRows, spinnerRow, toolRow } from './rows'
+import { drawsBlocks, hasBlocks } from './blocks'
+import { copyOf, isShell, splitReply } from './markdown'
+import type { Segment } from './markdown'
+import { CHART_HINT, parseMermaid } from './mermaid'
+import { artKind } from './mermaid-art'
+import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
 import { settingsPane } from './settings'
@@ -22,6 +26,7 @@ import { shellOutputOf } from './svg-terminal'
 import { limitLabel, metersOf } from './svg-usage'
 import { shortenPath } from './format'
 import { kindOf, summarize } from './tools'
+import { errorLine, isQuiet, quietLabel } from './quiet'
 import { isDue, isNewer, LATEST_URL, updateNotice, versionOf } from './updates'
 import type { Checked } from './updates'
 
@@ -51,9 +56,13 @@ const durationAtom = atom({ plugin: 'skins', key: 'duration' } as const, -1)
 const editingAtom = atom({ plugin: 'skins', key: 'editing' } as const, 'user' as SkinSlot)
 const lightAtom = atom({ plugin: 'skins', key: 'isLight' } as const, false)
 const imagesAtom = atom({ plugin: 'skins', key: 'images' } as const, false)
+// Whether a call only looked, so quiet output folds its result away.
+const quietAtom = atom({ plugin: 'skins', key: 'quiet' } as const, false)
 const usageAtom = atom({ plugin: 'skins', key: 'usage' } as const, { context: null, limits: [] } as UsageSnap)
 const compactingAtom = atom({ plugin: 'skins', key: 'compacting' } as const, false)
 const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
+// The main loop's last answer, for `/skin copy`.
+const lastReplyAtom = atom({ plugin: 'skins', key: 'lastReply' } as const, '')
 
 const EDITS = new Set(['Edit', 'MultiEdit', 'Write'])
 
@@ -291,7 +300,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | icons]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -374,6 +383,10 @@ export const register: Register = on => {
       await update($, turnsAtom, turns =>
         Object.fromEntries([...Object.entries(turns), [String(e.durationMs), finished]].slice(-KEPT_TURNS)),
       )
+
+      if (e.answer.trim() !== '') {
+        await update($, lastReplyAtom, () => e.answer)
+      }
     }
 
     return next(e)
@@ -386,6 +399,11 @@ export const register: Register = on => {
     const ms = (await $.clock.now()) - startedAt
 
     await update($, memberOf(durationAtom, { requestId: e.tool_use_id }), () => ms)
+
+    // The call's arguments ride on the event itself (`e.command` for Bash).
+    if (isQuiet(e.tool, e)) {
+      await update($, memberOf(quietAtom, { requestId: e.tool_use_id }), () => true)
+    }
 
     if (e.agentId === undefined && e.tool !== DESIGN && ran.deny === undefined) {
       const diff = diffstat(ran.result)
@@ -425,6 +443,19 @@ export const register: Register = on => {
     }
 
     const word = e.args.trim().toLowerCase()
+
+    if (word === 'copy' || word === 'copy code') {
+      const copied = copyOf(await read($, lastReplyAtom), word === 'copy code')
+
+      if ('message' in copied) {
+        $.ui.toast(copied.message)
+      } else {
+        const result = await $.ui.copy({ text: copied.text })
+        $.ui.toast(result.isCopied ? (word === 'copy' ? 'Copied the reply' : 'Copied the code') : 'Could not copy here')
+      }
+
+      return {}
+    }
 
     if (word === 'pin' || word === 'unpin' || word === 'share') {
       $.ui.toast(await runFolderCommand($, word))
@@ -513,10 +544,15 @@ reply width: ${lastColumns} columns`
     const diff = diffstat(e.props.output)
     const target = summarize(e.props.tool, e.props.input, await $.session.cwd())
 
-    return toolRow(lookOf($.ui.resolve(e), active, e.surface), e.props, kind, target, {
+    const meta = {
       ...(ms >= 0 && !e.props.isRunning ? { ms } : {}),
       ...(diff === null ? {} : diff),
-    })
+    }
+    const look = lookOf($.ui.resolve(e), active, e.surface)
+
+    return active.prefs.quiet && isQuiet(e.props.tool, e.props.input)
+      ? toolRow(look, e.props, kind, target, meta, quietLabel(e.props.tool))
+      : toolRow(look, e.props, kind, target, meta)
   })
 
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
@@ -537,6 +573,11 @@ reply width: ${lastColumns} columns`
     }
     const look = active === null ? undefined : { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }
     const columns = e.viewport?.columns ?? 100
+
+    // A call that only looked folds away; a failure keeps the line that says why.
+    if (look !== undefined && look.prefs.quiet && (await read($, memberOf(quietAtom, e)))) {
+      return quietResult(look, e.props.isErrored ? errorLine(e.props.output) : null)
+    }
 
     // The desktop gets cards: a diff for an edit, a terminal for a shell command.
     if (look?.svg !== undefined && EDITS.has(e.props.tool) && !e.props.isErrored) {
@@ -580,24 +621,51 @@ reply width: ${lastColumns} columns`
     return promptRow(look, e.props.text, hasImages ? await next({ ...e, props: { ...e.props, text: '' } }) : undefined)
   })
 
-  // A reply keeps Claude Code's own drawing unless it holds a table to draw.
+  // While charts are drawn, the model learns it can answer a "show me" with a Mermaid
+  // fence. Nothing for a headless run, which draws nothing.
+  on('prompt.compose', async ($, e, next) => {
+    const result = await next(e)
+    const active = await activeSkin($)
+    const isHeadless = e.surfaces.length === 0 || e.traits.includes('bare') || e.traits.includes('print')
+
+    if (active === null || !active.prefs.charts || isHeadless) {
+      return result
+    }
+
+    return { sections: [...result.sections, { id: 'skins:charts', text: CHART_HINT, scope: 'session' as const }] }
+  })
+
+  // A reply keeps Claude Code's own drawing unless it holds a card or markdown the pack draws.
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const active = await activeSkin($)
 
     const text = e.props.text
 
-    if (active === null || active.prefs.tables === 'off' || !/\||```|~~~/.test(text)) {
+    if (active === null) {
       return next(e)
     }
 
-    const segments = splitReply(text)
-    const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
+    const { prefs } = active
+    const cards = prefs.tables !== 'off' && /\||```|~~~/.test(text)
+    // The terminal draws every paragraph itself; elsewhere only alerts and task lists.
+    const blocks = prefs.markdown && (e.surface === 'terminal' || hasBlocks(text))
+    // With cards off, a Mermaid fence the parser reads is still split out to draw.
+    const charts = prefs.charts && /mermaid/i.test(text)
 
+    if (!cards && !blocks && !charts) {
+      return next(e)
+    }
+
+    const charted = (lang: string, code: string) =>
+      lang === 'mermaid' && (parseMermaid(code) !== null || (e.surface === 'terminal' && artKind(code) !== null))
+    const segments: Segment[] = cards ? splitReply(text) : charts ? splitReply(text, { tables: false, fence: charted }) : [{ kind: 'text', text }]
+    const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
     // Off the terminal a shell fence keeps the app's drawing, for its Run button; a reply
     // with nothing else to draw is left to the app whole.
-    const drawn = e.surface === 'terminal' ? segments : segments.filter(segment => !isShell(segment))
+    const kept = e.surface === 'terminal' ? segments : segments.filter(segment => !isShell(segment))
+    const drawn = kept.some(segment => segment.kind !== 'text' || (prefs.markdown && drawsBlocks(segment.text, e.surface)))
 
-    if (!fits || !drawn.some(segment => segment.kind !== 'text')) {
+    if (!fits || !drawn) {
       return next(e)
     }
 

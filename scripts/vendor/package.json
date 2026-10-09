@@ -1,0 +1,13 @@
+{
+  "name": "claude-skins-vendor",
+  "private": true,
+  "description": "Builds hooks/vendor/mermaid-ascii.js from beautiful-mermaid",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "beautiful-mermaid": "1.1.3",
+    "esbuild": "0.28.2"
+  }
+}

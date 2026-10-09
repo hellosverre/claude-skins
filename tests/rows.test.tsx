@@ -182,13 +182,40 @@ test('a reply with a table draws the table, a reply without one keeps its own dr
     ({ ...SITE, surface: 'terminal', component: 'AssistantMessage', requestId: 'r1', props: { text, isFirstOfReply: true } }) as const
 
   const withTable = await $.ui.mount(reply('Limits:\n\n| Route | Limit |\n|---|--:|\n| /chat | 60 |\n| /up | 10 |'))
-  expect(await withTable.find({ type: 'Markdown' })).toBeDefined()
+  expect(await withTable.find({ type: 'Text', text: 'Limits:' })).toBeDefined()
   expect(await withTable.find({ type: 'Text', text: 'Route' })).toBeDefined()
   expect(await withTable.find({ type: 'Text', text: '10' })).toBeDefined()
   await withTable.unmount()
 
   const plain = await $.ui.mount(reply('No table | here, just a pipe.'))
   expect(await plain.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
+test('the markdown pack draws alerts and task lists everywhere, headings and paragraphs on the terminal', async ($, on) => {
+  stubEngine(on)
+
+  const text = '## Plan\n\nRan 54 tests in 3.2s.\n\n> [!WARNING]\n> This deletes the cache.\n\n- [x] parse\n- [ ] draw'
+  const reply = (surface: (typeof SURFACES)[number]) =>
+    ({ ...SITE, surface, component: 'AssistantMessage', requestId: `md-${surface}`, props: { text, isFirstOfReply: true } }) as const
+
+  const terminal = await $.ui.mount(reply('terminal'))
+  expect(await terminal.find({ type: 'Text', text: '▍ Plan' })).toBeDefined()
+  expect(spanColor((await terminal.find({ type: 'Text', text: /Ran 54 tests/ })) as Found, '3.2s')).toBe('#f5f5f5')
+  expect(await terminal.find({ type: 'Text', text: '▲ Warning' })).toBeDefined()
+  expect(JSON.stringify(await terminal.find({ type: 'Box' }))).toContain('"borderStyle":"round"')
+  expect(await terminal.find({ type: 'Text', text: '☑ ' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '1/2 done' })).toBeDefined()
+  await terminal.unmount()
+
+  const desktop = await $.ui.mount(reply('desktop'))
+  expect(await desktop.find({ type: 'Text', text: '▲ Warning' })).toBeDefined()
+  // The desktop's own markdown sets headings and paragraphs.
+  expect(((await desktop.find({ type: 'Markdown' })) as Found)?.props.text).toBe('## Plan\n\nRan 54 tests in 3.2s.')
+  await desktop.unmount()
+
+  await runSkin($, 'markdown off')
+  const off = await $.ui.mount(reply('terminal'))
+  expect(await off.find({ type: 'Text', text: 'stock row' })).toBeDefined()
 })
 
 test('a terminal table sizes Korean, Chinese, Japanese and emoji cells to their full width', async ($, on) => {
@@ -461,6 +488,153 @@ test('a code fence is a card on the desktop and stays markdown in the terminal',
   expect(await terminal.find({ type: 'Markdown' })).toBeDefined()
 })
 
+const FLOW = 'Steps:\n\n```mermaid\nflowchart TD\n  A[Plan] --> B[Build]\n  B -->|ship| C[Live]\n```'
+
+const chartReply = (surface: (typeof SURFACES)[number], text = FLOW) =>
+  ({ ...SITE, surface, component: 'AssistantMessage', requestId: 'm1', props: { text, isFirstOfReply: true } }) as const
+
+test('a Mermaid fence is a chart card on the desktop and a laid-out diagram in the terminal', async ($, on) => {
+  stubEngine(on)
+
+  const desktop = await $.ui.mount(chartReply('desktop'))
+  const card = (await desktop.find({ type: 'Svg' })) as { props: { source: string; alt: string } } | undefined
+  expect(card?.props.source).toContain('FLOWCHART')
+  expect(card?.props.alt).toContain('Build → Live (ship)')
+  await desktop.unmount()
+
+  // Boxes drawn in cells, each in a colour of its own, the links quiet.
+  const terminal = await $.ui.mount(chartReply('terminal'))
+  expect(await terminal.find({ type: 'Svg' })).toBeUndefined()
+  expect(await terminal.find({ type: 'Text', text: 'FLOWCHART' })).toBeDefined()
+  const art = (await terminal.findAll({ type: 'Text' })).map(text => JSON.stringify(text.children ?? []))
+  expect(art.some(row => row.includes('┌') && row.includes('┐'))).toBe(true)
+  expect(art.some(row => row.includes('▼'))).toBe(true)
+  const plan = await terminal.find({ type: 'Text', text: 'Plan' })
+  const build = await terminal.find({ type: 'Text', text: 'Build' })
+  expect(spanColor(plan, '│')).toBeDefined()
+  expect(spanColor(plan, '│')).not.toBe(spanColor(build, '│'))
+  await terminal.unmount()
+
+  const sequence = await $.ui.mount(chartReply('terminal', '```mermaid\nsequenceDiagram\n  Alice->>Bob: Hi\n  Bob-->>Alice: Yo\n```'))
+  expect(await sequence.find({ type: 'Text', text: 'SEQUENCE' })).toBeDefined()
+  expect(await sequence.find({ type: 'Text', text: 'Alice' })).toBeDefined()
+  await sequence.unmount()
+
+  const bars = await $.ui.mount(chartReply('terminal', '```mermaid\nxychart-beta\n  x-axis [a, b, c]\n  bar [3, 7, 5]\n```'))
+  const chartRows = (await bars.findAll({ type: 'Text' })).map(text => JSON.stringify(text.children ?? []))
+  expect(chartRows.some(row => row.includes('█'))).toBe(true)
+  await bars.unmount()
+
+  // Pies stay ours: a bar per slice with its share.
+  const pie = await $.ui.mount(chartReply('terminal', '```mermaid\npie title Pets\n  "Dogs" : 3\n  "Cats" : 1\n```'))
+  expect(await pie.find({ type: 'Text', text: '3  75%' })).toBeDefined()
+  await pie.unmount()
+
+  const shares = await $.ui.mount(chartReply('terminal', '```mermaid\npie\n  "a" : 91\n  "b" : 9\n```'))
+  expect(await shares.find({ type: 'Text', text: '9%' })).toBeDefined()
+  await shares.unmount()
+})
+
+const GANTT = '```mermaid\ngantt\n  title Launch\n  dateFormat YYYY-MM-DD\n  section Build\n  Parser :done, p1, 2026-10-01, 4d\n  Cards :after p1, 3d\n```'
+const GIT = '```mermaid\ngitGraph\n  commit id: "init"\n  branch dev\n  commit\n  checkout main\n  merge dev tag: "v1"\n```'
+
+test('the new chart kinds draw as cards on the desktop and as cell art in the terminal', async ($, on) => {
+  stubEngine(on)
+
+  const desktop = await $.ui.mount(chartReply('desktop', GANTT))
+  const card = (await desktop.find({ type: 'Svg' })) as { props: { source: string; alt: string } } | undefined
+  expect(card?.props.source).toContain('Parser')
+  expect(card?.props.alt).toContain('Cards: 2026-10-05 to 2026-10-08')
+  await desktop.unmount()
+
+  const gantt = await $.ui.mount(chartReply('terminal', GANTT))
+  expect(await gantt.find({ type: 'Svg' })).toBeUndefined()
+  expect(await gantt.find({ type: 'Text', text: 'GANTT' })).toBeDefined()
+  const bars = (await gantt.findAll({ type: 'Text' })).map(text => JSON.stringify(text.children ?? []))
+  expect(bars.some(row => row.includes('█'))).toBe(true)
+  await gantt.unmount()
+
+  const git = await $.ui.mount(chartReply('terminal', GIT))
+  expect(await git.find({ type: 'Text', text: 'GIT GRAPH' })).toBeDefined()
+  const lanes = (await git.findAll({ type: 'Text' })).map(text => JSON.stringify(text.children ?? []))
+  expect(lanes.some(row => row.includes('◉'))).toBe(true)
+  await git.unmount()
+})
+
+const textOf = (node: unknown): string =>
+  typeof node === 'string' ? node : ((node as { children?: readonly unknown[] }).children ?? []).map(textOf).join('')
+
+test('a terminal diagram keeps every link joined to its box', async ($, on) => {
+  stubEngine(on)
+
+  // A retry loop: the renderer alone leaves a junction out from the Pass? box, a stray
+  // one inside Wait, and the retry link short of Test with no arrowhead.
+  const source = [
+    'flowchart TD',
+    '  T[Test] --> P{Pass?}',
+    '  P -->|yes| K[Package]',
+    '  P -->|no| R{Retries?}',
+    '  R -->|yes| W[Wait]',
+    '  R -->|no| F[Failed]',
+    '  W -->|retry| T',
+    '  K --> M{Main?}',
+    '  M -->|no| D[Done]',
+  ].join('\n')
+  const terminal = await $.ui.mount(chartReply('terminal', `\`\`\`mermaid\n${source}\n\`\`\``))
+  const rows = (await terminal.findAll({ type: 'Text' })).map(textOf)
+
+  expect(rows.some(row => row.includes('Pass?  ├────'))).toBe(true)
+  expect(rows.some(row => row.includes('Test  │◄──retry┐'))).toBe(true)
+  expect(rows.some(row => /│ {1,3}[├┤]|[├┤] {1,3}│|│ +┴ +│/.test(row))).toBe(false)
+  await terminal.unmount()
+})
+
+test('a diagram too wide for the terminal falls back to rows, one nothing can read to its code', async ($, on) => {
+  stubEngine(on)
+
+  // Too wide even top to bottom: our own rows draw it.
+  const label = 'A step whose name runs on well past forty cells'
+  const fallback = await $.ui.mount({ ...chartReply('terminal', `\`\`\`mermaid\nflowchart LR\n  A[${label}] --> B[Done]\n\`\`\``), viewport: { columns: 40, rows: 30 } })
+  const borders = (await fallback.findAll({ type: 'Box' })).map(box => box.props.borderStyle)
+  expect(borders).toContain('single')
+  await fallback.unmount()
+
+  const broken = await $.ui.mount(chartReply('terminal', '```mermaid\nsequenceDiagram\n  ->>: ???\n```'))
+  expect(await broken.find({ type: 'Text', text: 'SEQUENCE' })).toBeUndefined()
+  await broken.unmount()
+})
+
+test('with charts off, or Mermaid the parser cannot read, the fence keeps its code drawing', async ($, on) => {
+  stubEngine(on)
+
+  const unread = await $.ui.mount(chartReply('desktop', '```mermaid\nsequenceDiagram\n  A->>B: hi\n```'))
+  expect(((await unread.find({ type: 'Svg' })) as { props: { source: string } } | undefined)?.props.source).toContain('sequenceDiagram')
+  await unread.unmount()
+
+  await runSkin($, 'tables off')
+  const tablesOff = await $.ui.mount(chartReply('terminal'))
+  expect(await tablesOff.find({ type: 'Text', text: 'Plan' })).toBeDefined()
+  await tablesOff.unmount()
+
+  await runSkin($, 'charts off')
+  const off = await $.ui.mount(chartReply('desktop'))
+  expect(await off.find({ type: 'Svg' })).toBeUndefined()
+})
+
+test('while charts are on, the system prompt tells Claude it can answer with one', async ($, on) => {
+  stubEngine(on)
+  on('prompt.compose', () => ({ sections: [{ id: 'base', text: 'You are Claude.', scope: 'shared' as const }] }))
+
+  const compose = (traits: readonly string[] = []) =>
+    $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: traits as never })
+
+  expect((await compose()).sections.map(section => section.id)).toEqual(['base', 'skins:charts'])
+  expect((await compose(['print'])).sections.map(section => section.id)).toEqual(['base'])
+
+  await runSkin($, 'charts off')
+  expect((await compose()).sections.map(section => section.id)).toEqual(['base'])
+})
+
 const BAND = (surface: (typeof SURFACES)[number], isWorking: boolean) =>
   ({
     ...SITE,
@@ -639,7 +813,7 @@ test('a theme set mid-session is drawn at once, though the settings list still h
   on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
 
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
-  await $.config.set({ key: 'theme', value: 'dark' })
+  await $.config.set({ key: 'theme', value: 'dark' } as never)
 
   const row = await $.ui.mount(toolUse(call('Bash', { command: 'ls' })))
   expect(spanColor(await row.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
@@ -694,6 +868,75 @@ test('/skin pin keeps a look to this folder, /skin unpin returns to the default'
 
   expect(store.folders).toEqual({})
   expect((store.prefs as { skin: string }).skin).toBe('dracula')
+})
+
+test('quiet output folds a read-only call to its row, a failure to its error line', async ($, on) => {
+  stubEngine(on)
+  // The kit gives each call its own id; the engine's answer reads it back.
+  const ids: string[] = []
+  on('tool.call', ($, e) => {
+    ids.push(e.tool_use_id)
+    return { result: { stdout: 'On branch main', stderr: '', interrupted: false } }
+  })
+
+  const result = (id: string, tool: string, output: unknown, isErrored = false) =>
+    ({ ...SITE, surface: 'terminal', component: 'ToolResult', requestId: id, props: { tool_use_id: id, tool, output, isErrored } }) as const
+
+  await $.tool.call({ tool: 'Bash', command: 'git status' })
+  await $.tool.call({ tool: 'Bash', command: 'pnpm build' })
+  const [q1 = '', q2 = ''] = ids
+
+  // Off by default: a read-only call keeps its output.
+  const before = await $.ui.mount(result(q1, 'Bash', { stdout: 'On branch main', stderr: '', interrupted: false }))
+  expect(await before.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  await before.unmount()
+
+  await runSkin($, 'quiet on')
+
+  const grep = await $.ui.mount(toolUse(call('Grep', { pattern: 'TODO' })))
+  expect(await grep.find({ type: 'Text', text: /Searched/ })).toBeDefined()
+  await grep.unmount()
+
+  const quiet = await $.ui.mount(result(q1, 'Bash', { stdout: 'On branch main', stderr: '', interrupted: false }))
+  expect(await quiet.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+  await quiet.unmount()
+
+  const failed = await $.ui.mount(result(q1, 'Bash', { stdout: '', stderr: 'fatal: not a git repository', interrupted: false }, true))
+  expect(await failed.find({ type: 'Text', text: '✖ fatal: not a git repository' })).toBeDefined()
+  await failed.unmount()
+
+  // A call that might write keeps its output.
+  const loud = await $.ui.mount(result(q2, 'Bash', { stdout: 'built', stderr: '', interrupted: false }))
+  expect(await loud.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
+test('/skin copy copies the last reply and says so, or says there is nothing yet', async ($, on) => {
+  stubEngine(on, { toast: true })
+  const copied: string[] = []
+  const toasts: string[] = []
+  on('ui.copy', ($, e) => {
+    copied.push(e.text)
+    return { value: { isCopied: true } }
+  })
+  on('ui.toast', ($, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+
+  const reply = 'Run:\n\n```bash\npnpm build\n```'
+  const turn = { durationMs: 1000, isAborted: false, reason: 'answer' } as const
+
+  await runSkin($, 'copy')
+  await $.turn.complete({ ...turn, turnId: 't1', answer: reply })
+  // A subagent's answer is not the reply on screen.
+  await $.turn.complete({ ...turn, turnId: 't2', answer: 'subagent notes', agentId: 'a1' })
+  await runSkin($, 'copy')
+  await runSkin($, 'copy code')
+
+  expect(toasts).toEqual(['Nothing to copy yet', 'Copied the reply', 'Copied the code'])
+  expect(copied).toEqual([reply, 'pnpm build'])
 })
 
 // The update check runs unawaited off session.start; a macrotask lets it finish.
