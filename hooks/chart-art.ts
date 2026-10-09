@@ -2,6 +2,7 @@ import { blit, gridOf, padTo, runsOf, runsOfLines, seg, wrapTo, write, writeAll 
 import type { Grid, Segment } from './art-canvas'
 import { gitArt, mindmapArt, quadrantArt, radarArt, sankeyArt } from './chart-art-shape'
 import { packetArt, treemapArt } from './chart-art-data'
+import { architectureArt, blockArt, c4Art } from './chart-art-system'
 import { cutCell, widthOf } from './markdown'
 import { chartHeading, formatPercent, formatValue } from './mermaid'
 import type { Chart, Gantt, Journey, Kanban, Pie, Timeline } from './mermaid'
@@ -46,6 +47,12 @@ function drawn(chart: Chart, room: number, ascii: boolean): Run[][] | null {
       return treemapArt(chart, room, ascii)
     case 'packet':
       return packetArt(chart, room, ascii)
+    case 'block':
+      return blockArt(chart, room, ascii)
+    case 'architecture':
+      return architectureArt(chart, room, ascii)
+    case 'c4':
+      return c4Art(chart, room, ascii)
     case 'flow':
     case 'xy':
       return null

@@ -6,6 +6,7 @@ import type { Body } from './svg-chart-kit'
 import { ganttBody, journeyBody, kanbanBody, timelineBody } from './svg-chart-plan'
 import { gitBody, mindmapBody, quadrantBody, radarBody, sankeyBody } from './svg-chart-shape'
 import { packetBody, treemapBody } from './svg-chart-data'
+import { architectureBody, blockBody, c4Body, systemAlt } from './svg-chart-system'
 import { CONTROL_SLOT, escape, fitText, HEADER_MID, measure, riseDelay, svgCard } from './svg-kit'
 
 // A Mermaid fence drawn as a card in the same shell as code and tables: the kind and
@@ -76,6 +77,12 @@ function bodyOf(chart: Chart, palette: Palette, width: number): Body | null {
       return treemapBody(chart, palette, width)
     case 'packet':
       return packetBody(chart, palette, width)
+    case 'block':
+      return blockBody(chart, palette, width)
+    case 'architecture':
+      return architectureBody(chart, palette, width)
+    case 'c4':
+      return c4Body(chart, palette, width)
   }
 }
 
@@ -126,6 +133,12 @@ function altOf(chart: Chart): string {
       return [titled('Treemap', chart.title), ...chart.roots.flatMap(root => treeLines(root, 0))].join('\n')
     case 'packet':
       return [titled('Packet', chart.title), ...chart.fields.map(field => `${field.start === field.end ? field.start : `${field.start}-${field.end}`}: ${field.label}`)].join('\n')
+    case 'block':
+      return systemAlt(chart, titled('Block diagram', chart.title))
+    case 'architecture':
+      return systemAlt(chart, titled('Architecture', chart.title))
+    case 'c4':
+      return systemAlt(chart, titled(`C4 ${chart.level.toLowerCase()}`, chart.title))
   }
 }
 

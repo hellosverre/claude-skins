@@ -18,7 +18,7 @@ import { inlineRuns, splitBlocks } from '../hooks/blocks'
 import { errorLine, isQuiet, isReadOnlyShell, segmentsOf } from '../hooks/quiet'
 import tokyoNight from '../hooks/themes/tokyo-night'
 import { chartHeading, formatPercent, niceStep, parseMermaid, seriesName } from '../hooks/mermaid'
-import type { Flow, Gantt, GitGraph, Journey, Kanban, Mindmap, Packet, Pie, Quadrant, Radar, Sankey, Timeline, Treemap, XyChart } from '../hooks/mermaid'
+import type { Architecture, Block, C4, Flow, Gantt, GitGraph, Journey, Kanban, Mindmap, Packet, Pie, Quadrant, Radar, Sankey, Timeline, Treemap, XyChart } from '../hooks/mermaid'
 import { chartSvg } from '../hooks/svg-chart'
 import { chartArt } from '../hooks/chart-art'
 import { blockBar, dotRule } from '../hooks/chart-rows'
@@ -736,6 +736,104 @@ test('a packet field too narrow for its name is named in full under the art', as
   expect(text).toContain('9 ACK')
 })
 
+test('a block diagram reads columns, spans, shapes, nested blocks and labelled links', async () => {
+  const block = parseMermaid([
+    'block-beta',
+    '  columns 3',
+    '  frontend["Web app"]:2 cdn(("CDN"))',
+    '  space:3',
+    '  block:backend:3',
+    '    columns 2',
+    '    api["API"] worker[["Worker"]]',
+    '    db[("Postgres")] cache{"Cache"}',
+    '  end',
+    '  api -- "jobs" --> worker',
+    '  a --> b',
+  ].join('\n')) as Block
+  const backend = block.parts[3]
+
+  expect(block.columns).toBe(3)
+  expect(block.parts.slice(0, 3).map(part => (part.type === 'box' ? [part.id, part.shape, part.span] : [part.type, part.span]))).toEqual([
+    ['frontend', 'box', 2],
+    ['cdn', 'circle', 1],
+    ['gap', 3],
+  ])
+  expect(backend?.type === 'frame' && backend.parts.map(part => part.type === 'box' && part.shape)).toEqual(['box', 'subroutine', 'cylinder', 'diamond'])
+  expect(block.links[0]).toEqual({ from: 'api', to: 'worker', label: 'jobs', arrow: 'to', line: 'solid' })
+  // A link line declares the blocks it names, as Mermaid does.
+  expect(block.boxes).toBe(8)
+  expect(chartHeading(block)).toEqual({ kind: 'Block diagram', count: '8 blocks' })
+})
+
+test('an architecture places services on a grid from the sides their edges join', async () => {
+  const architecture = parseMermaid([
+    'architecture-beta',
+    '  group cloud(cloud)[Cloud]',
+    '  group data(database)[Data] in cloud',
+    '  service gateway(internet)[Gateway] in cloud',
+    '  service api(server)[API] in cloud',
+    '  service db(database)[Database] in data',
+    '  service browser(internet)[Browser]',
+    '  junction mid in cloud',
+    '  browser:R --> L:gateway',
+    '  gateway:R --> L:api',
+    '  api:B --> T:mid',
+    '  mid:L -- R:db',
+  ].join('\n')) as Architecture
+  const at = (id: string) => architecture.services.find(service => service.id === id)
+
+  expect(architecture.groups.map(group => [group.id, group.parent])).toEqual([
+    ['cloud', null],
+    ['data', 'cloud'],
+  ])
+  expect([at('browser'), at('gateway'), at('api'), at('mid'), at('db')].map(service => [service?.col, service?.row])).toEqual([
+    [0, 0],
+    [1, 0],
+    [2, 0],
+    [2, 1],
+    [1, 1],
+  ])
+  expect(at('mid')?.isJunction).toBe(true)
+  expect(architecture.edges[3]).toEqual({ from: 'mid', fromSide: 'L', to: 'db', toSide: 'R', label: '', arrow: 'none' })
+  expect(chartHeading(architecture)).toEqual({ kind: 'Architecture', count: '4 services' })
+})
+
+test('a C4 diagram reads people, systems, boundaries and relations', async () => {
+  const c4 = parseMermaid([
+    'C4Context',
+    '  title Banking',
+    '  Person(customer, "Customer", "Has accounts")',
+    '  Enterprise_Boundary(bank, "Big bank") {',
+    '    System_Ext(mainframe, "Mainframe", "Core data")',
+    '    SystemDb(email, "E-mail")',
+    '  }',
+    '  Rel(customer, mainframe, "Reads", "HTTPS")',
+    '  BiRel(mainframe, email, "Syncs")',
+  ].join('\n')) as C4
+  const bank = c4.parts[1]
+
+  expect(c4.title).toBe('Banking')
+  expect(c4.parts[0]).toMatchObject({ type: 'box', id: 'customer', shape: 'person', notes: ['Person', 'Has accounts'] })
+  expect(bank?.type === 'frame' && bank.label).toBe('Big bank · enterprise')
+  expect(bank?.type === 'frame' && bank.parts.map(part => part.type === 'box' && [part.id, part.shape, part.isExternal])).toEqual([
+    ['mainframe', 'box', true],
+    ['email', 'cylinder', false],
+  ])
+  expect(c4.links.map(link => [link.label, link.arrow])).toEqual([
+    ['Reads [HTTPS]', 'to'],
+    ['Syncs', 'both'],
+  ])
+  expect(chartHeading(c4)).toEqual({ kind: 'C4 context', count: '3 elements' })
+})
+
+test('a C4 link through another box goes round it in a lane on narrow cards', async () => {
+  const c4 = parseMermaid('C4Context\n  System(a, "Top")\n  System(b, "Middle")\n  System(c, "Bottom")\n  Rel(a, c, "Skips")') as C4
+  const card = chartSvg(c4, tokyoNight.palette, 300)
+
+  expect(card?.source).toMatch(/<path d="M[\d.]+ [\d.]+H[\d.]+V[\d.]+H[\d.]+"/)
+  expect(card?.source).toContain('rotate(-90')
+})
+
 test('broken plans and shapes parse to nothing rather than half a chart; a score out of range clamps', async () => {
   expect(parseMermaid('gantt\n  title Empty')).toBeNull()
   expect(parseMermaid('gantt\n  dateFormat YYYY-MM-DD\n  Task :a1, after nowhere, 2d')).toBeNull()
@@ -747,6 +845,10 @@ test('broken plans and shapes parse to nothing rather than half a chart; a score
   expect(parseMermaid('treemap-beta\n"Leaf": 5\n    "Child": 2')).toBeNull()
   expect(parseMermaid('treemap-beta\n"Empty"')).toBeNull()
   expect(parseMermaid('packet-beta\n  0-7: "A"\n  10-15: "B"')).toBeNull()
+  expect(parseMermaid('block-beta\n' + Array.from({ length: 41 }, (_, i) => `  b${i}`).join('\n'))).toBeNull()
+  expect(parseMermaid('architecture-beta\n  group a[A] in b\n  group b[B] in a\n  service s(server)[S] in a')).toBeNull()
+  expect(parseMermaid('architecture-beta\n  service a(server)[A]\n  a:R --> L:nowhere')).toBeNull()
+  expect(parseMermaid('C4Context\n  Person(a, "A")\n  Rel(a, nowhere, "x")')).toBeNull()
 })
 
 const SAMPLES = [
@@ -761,6 +863,9 @@ const SAMPLES = [
   'gitGraph\n  commit\n  branch dev\n  commit\n  checkout main\n  merge dev',
   'treemap-beta\n"Compute"\n    "EC2": 420\n    "Lambda": 160\n"Storage"\n    "S3": 210\n"Network": 75',
   'packet-beta\n  0-15: "Source Port"\n  16-31: "Destination Port"\n  32: "URG"\n  33: "ACK"\n  34-63: "Rest"',
+  'block-beta\n  columns 3\n  a["Web"]:2 b(("CDN"))\n  block:back:3\n    c[("DB")] d{"Cache"}\n  end\n  a --> c\n  b -- "push" --> a',
+  'architecture-beta\n  group cloud(cloud)[Cloud]\n  service api(server)[API] in cloud\n  service db(database)[Database] in cloud\n  junction mid\n  api:R --> L:db\n  api:B -- T:mid',
+  'C4Context\n  Person(u, "User", "Signs in")\n  System_Boundary(s, "Shop") {\n    System(web, "Web", "Sells things")\n  }\n  Rel(u, web, "Buys", "HTTPS")',
 ]
 
 test('every new kind draws a card with a readable alt, and art that ascii mode keeps to ASCII', async () => {

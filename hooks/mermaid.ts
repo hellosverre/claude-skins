@@ -10,10 +10,13 @@ import { parseGitGraph, parseMindmap, parseQuadrant, parseRadar, parseSankey } f
 import type { GitGraph, Mindmap, Quadrant, Radar, Sankey } from './mermaid-shape'
 import { parsePacket, parseTreemap } from './mermaid-data'
 import type { Packet, Treemap } from './mermaid-data'
+import { parseArchitecture, parseBlock, parseC4 } from './mermaid-system'
+import type { Architecture, Block, C4 } from './mermaid-system'
 
 export type * from './mermaid-plan'
 export type * from './mermaid-shape'
 export type * from './mermaid-data'
+export type * from './mermaid-system'
 
 export type Shape = 'box' | 'round' | 'diamond'
 
@@ -41,7 +44,7 @@ export type Slice = { label: string; value: number }
 
 export type Pie = { kind: 'pie'; title: string; slices: Slice[] }
 
-export type Chart = Flow | XyChart | Pie | Gantt | Timeline | Journey | Kanban | Mindmap | Quadrant | Radar | Sankey | GitGraph | Treemap | Packet
+export type Chart = Flow | XyChart | Pie | Gantt | Timeline | Journey | Kanban | Mindmap | Quadrant | Radar | Sankey | GitGraph | Treemap | Packet | Block | Architecture | C4
 
 // Past these a picture stops being easier to read than the source.
 export const MAX_NODES = 40
@@ -70,6 +73,8 @@ const KINDS: readonly (readonly [RegExp, (body: readonly string[]) => Chart | nu
   [/^gitGraph\b/, parseGitGraph],
   [/^treemap(-beta)?\b/, parseTreemap],
   [/^packet(-beta)?\b/, parsePacket],
+  [/^block(-beta)?\s*$/, parseBlock],
+  [/^architecture(-beta)?\s*$/, parseArchitecture],
 ]
 
 function parseKind(lines: readonly string[]): Chart | null {
@@ -86,6 +91,10 @@ function parseKind(lines: readonly string[]): Chart | null {
 
   if (/^pie\b/.test(head)) {
     return parsePie(head, body)
+  }
+
+  if (/^C4(Context|Container|Component|Dynamic|Deployment)\s*$/.test(head)) {
+    return parseC4(head, body)
   }
 
   const parse = KINDS.find(([pattern]) => pattern.test(head))?.[1]
@@ -353,6 +362,12 @@ export function chartHeading(chart: Chart): { kind: string; count: string } {
       return { kind: 'Treemap', count: plural(chart.leaves, 'item') }
     case 'packet':
       return { kind: 'Packet', count: plural(chart.bits, 'bit') }
+    case 'block':
+      return { kind: 'Block diagram', count: plural(chart.boxes, 'block') }
+    case 'architecture':
+      return { kind: 'Architecture', count: plural(chart.services.filter(service => !service.isJunction).length, 'service') }
+    case 'c4':
+      return { kind: `C4 ${chart.level.toLowerCase()}`, count: plural(chart.boxes, 'element') }
   }
 }
 
@@ -383,7 +398,7 @@ export const CHART_HINT = [
   'This transcript draws ```mermaid fences as pictures. Supported: `flowchart TD|LR` (nodes A[box], A(round), A{decision};',
   'edges -->, -.->, ==>, with labels -->|yes|), `xychart-beta` (title "…", x-axis [a, b], y-axis "unit" 0 --> 100,',
   'bar [..], line [..]), `pie` (title …, "label" : value), `gantt`, `timeline`, `journey`, `kanban`, `mindmap`,',
-  '`quadrantChart`, `radar-beta`, `sankey-beta`, `gitGraph`, `treemap-beta` and `packet-beta`. No subgraphs or styling; at most 40 nodes.',
+  '`quadrantChart`, `radar-beta`, `sankey-beta`, `gitGraph`, `treemap-beta`, `packet-beta`, `block-beta`, `architecture-beta` and `C4Context`/`C4Container`. No subgraphs or styling; at most 40 nodes.',
   'In the terminal `sequenceDiagram`, `stateDiagram-v2`, `classDiagram` and `erDiagram` draw too.',
   'When a process, a schedule, a comparison of numbers or a breakdown reads better as a picture than as prose or a table, draw one.',
 ].join(' ')
