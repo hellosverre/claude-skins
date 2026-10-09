@@ -738,6 +738,19 @@ test('a packet field too narrow for its name is named in full under the art', as
   expect(text).toContain('9 ACK')
 })
 
+test('an xy chart draws bars up from a ticked axis, names only named series, and gives ASCII bars their own marks', async () => {
+  const textOf = (chart: XyChart, ascii: boolean): string => chartArt(chart, 80, ascii)?.rows.map(row => row.map(segment => segment.text).join('')).join('\n') ?? ''
+  const plain = parseMermaid('xychart-beta\n  x-axis [Jan, Feb, Mar]\n  y-axis 0 --> 100\n  bar [20, 60, 90]\n  line [30, 50, 80]') as XyChart
+  const named = parseMermaid('xychart-beta\n  x-axis [Q1, Q2]\n  y-axis 0 --> 100\n  bar "Free" [40, 80]\n  bar "Plus" [10, 30]') as XyChart
+
+  expect(textOf(plain, false)).toContain('█')
+  expect(textOf(plain, false)).toMatch(/^ *50 ┤/m)
+  expect(textOf(plain, false)).toMatch(/Jan +Feb +Mar/)
+  expect(textOf(plain, false)).not.toContain('bar')
+  expect(textOf(named, false)).toContain('■ Free   ■ Plus')
+  expect(textOf(named, true)).toContain('# Free   % Plus')
+})
+
 test('series colours skip a colour the skin gives two slots', async () => {
   const palette = rosePine.palette
   const colors = [0, 1, 2, 3].map(i => seriesColor(palette, i))

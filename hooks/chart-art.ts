@@ -3,13 +3,14 @@ import type { Grid, Segment } from './art-canvas'
 import { gitArt, mindmapArt, quadrantArt, radarArt, sankeyArt } from './chart-art-shape'
 import { packetArt, treemapArt } from './chart-art-data'
 import { architectureArt, blockArt, c4Art } from './chart-art-system'
+import { xyArt } from './chart-art-xy'
 import { cutCell, widthOf } from './markdown'
 import { chartHeading, formatPercent, formatValue } from './mermaid'
 import type { Chart, Gantt, Journey, Kanban, Pie, Timeline } from './mermaid'
 import type { Art, Run, Tone } from './mermaid-art'
 
-// The mod's own terminal drawings, for the kinds the vendored renderer does not draw:
-// a donut for pies, then the planning charts and the shapes. Each answers null when it
+// The mod's own terminal drawings: a donut for pies, bars and lines for xy charts, then
+// the planning charts and the shapes; the vendored renderer keeps flowcharts. Each answers null when it
 // cannot fit `columns`, and the caller falls back to bars or to the code.
 
 export function chartArt(chart: Chart, columns: number, ascii: boolean): Art | null {
@@ -53,8 +54,9 @@ function drawn(chart: Chart, room: number, ascii: boolean): Run[][] | null {
       return architectureArt(chart, room, ascii)
     case 'c4':
       return c4Art(chart, room, ascii)
-    case 'flow':
     case 'xy':
+      return xyArt(chart, room, ascii)
+    case 'flow':
       return null
   }
 }

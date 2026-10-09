@@ -152,39 +152,41 @@ export function quadrantArt(chart: Quadrant, room: number, ascii: boolean): Run[
 
 // --- Radar --------------------------------------------------------------------------
 
-// The web in braille: 22 × 11 cells is 44 × 44 dots, centre 22, radius 20.
-const WEB_COLS = 22
-const WEB_ROWS = 11
-const CENTRE = 22
-const RADIUS = 20
+// The web in braille, as many rows as the room allows between these: a row is four dots
+// tall and a column two wide, so twice the columns as rows keeps the web round.
+const WEB_ROWS_MIN = 11
+const WEB_ROWS_MAX = 17
 
 export function radarArt(chart: Radar, room: number, ascii: boolean): Run[][] | null {
   const n = chart.axes.length
-  const labelMax = Math.min(12, Math.max(...chart.axes.map(axis => widthOf(axis.label))), Math.floor((room - WEB_COLS) / 2) - 1)
+  const labelMax = Math.min(12, Math.max(...chart.axes.map(axis => widthOf(axis.label))), Math.floor((room - WEB_ROWS_MIN * 2) / 2) - 1)
 
   if (n < 3 || labelMax < 4) {
     return null
   }
 
   const margin = labelMax + 1
-  const width = WEB_COLS + margin * 2
-  const dots = dotsOf(WEB_COLS, WEB_ROWS)
+  const rows = Math.max(WEB_ROWS_MIN, Math.min(WEB_ROWS_MAX, Math.floor((room - margin * 2) / 2)))
+  const cols = rows * 2
+  const centre = rows * 2
+  const radius = centre - 2
+  const width = cols + margin * 2
+  const dots = dotsOf(cols, rows)
   const angle = (k: number): number => -Math.PI / 2 + (2 * Math.PI * k) / n
-  const at = (k: number, r: number): [number, number] => [CENTRE + r * Math.cos(angle(k)), CENTRE + r * Math.sin(angle(k))]
+  const at = (k: number, r: number): [number, number] => [centre + r * Math.cos(angle(k)), centre + r * Math.sin(angle(k))]
   const span = chart.max - chart.min || 1
-
   for (let k = 0; k < n; k++) {
-    line(dots, CENTRE, CENTRE, ...at(k, RADIUS), 'muted')
+    line(dots, centre, centre, ...at(k, radius), 'muted')
   }
 
   for (let t = 1; t <= chart.ticks; t++) {
-    const r = (RADIUS * t) / chart.ticks
+    const r = (radius * t) / chart.ticks
 
     if (chart.graticule === 'circle') {
       const steps = Math.ceil(2 * Math.PI * r)
 
       for (let s = 0; s < steps; s++) {
-        dot(dots, CENTRE + r * Math.cos((2 * Math.PI * s) / steps), CENTRE + r * Math.sin((2 * Math.PI * s) / steps), 'muted')
+        dot(dots, centre + r * Math.cos((2 * Math.PI * s) / steps), centre + r * Math.sin((2 * Math.PI * s) / steps), 'muted')
       }
     } else {
       for (let k = 0; k < n; k++) {
@@ -195,7 +197,7 @@ export function radarArt(chart: Radar, room: number, ascii: boolean): Run[][] | 
 
   // Curves last, so where they cross the web they win the cell.
   chart.curves.forEach((curve, i) => {
-    const radiusOf = (k: number): number => RADIUS * Math.max(0, Math.min(1, ((curve.values[k] ?? chart.min) - chart.min) / span))
+    const radiusOf = (k: number): number => radius * Math.max(0, Math.min(1, ((curve.values[k] ?? chart.min) - chart.min) / span))
 
     for (let k = 0; k < n; k++) {
       line(dots, ...at(k, radiusOf(k)), ...at((k + 1) % n, radiusOf((k + 1) % n)), series(i))
@@ -205,27 +207,32 @@ export function radarArt(chart: Radar, room: number, ascii: boolean): Run[][] | 
   const legend = chart.curves.map((curve, i): Segment[] => [seg(ascii ? '*' : '●', series(i)), seg(` ${curve.label}`, 'fg')])
   const inline = legend.reduce((sum, segments) => sum + widthOfSegments(segments) + 3, -3) <= room
   const legendRows = legend.length === 0 ? 0 : inline ? 1 : legend.length
-  const grid = gridOf(Math.max(width, room), WEB_ROWS + 3 + legendRows)
+  const grid = gridOf(Math.max(width, room), rows + 3 + legendRows)
 
   stamp(grid, dots, margin, 1, ascii)
 
-  // Labels just past the spoke ends: after the point on the right, before it on the
+  // Labels a cell clear of the spoke ends: after the point on the right, before it on the
   // left, centred over it at the top and bottom.
   chart.axes.forEach((axis, k) => {
     const label = cutCell(axis.label, labelMax)
-    const [dx, dy] = at(k, RADIUS + 3)
+    const [dx, dy] = at(k, radius + 3)
     const cos = Math.cos(angle(k))
     const x = margin + Math.floor(dx / 2)
-    const y = Math.max(0, Math.min(WEB_ROWS + 1, 1 + Math.floor(dy / 4)))
-    const start = cos > 0.3 ? x : cos < -0.3 ? x - widthOf(label) + 1 : x - Math.floor(widthOf(label) / 2)
+    const y = Math.max(0, Math.min(rows + 1, 1 + Math.floor(dy / 4)))
+    const start = cos > 0.3 ? x + 1 : cos < -0.3 ? x - widthOf(label) : x - Math.floor(widthOf(label) / 2)
 
     write(grid, Math.max(0, start), y, label, 'fg')
   })
 
   if (inline) {
-    writeAll(grid, 0, WEB_ROWS + 3, legend.flatMap((segments, i) => (i === 0 ? segments : [seg('   '), ...segments])))
+    writeAll(grid, 0, rows + 3, legend.flatMap((segments, i) => (i === 0 ? segments : [seg('   '), ...segments])))
   } else {
-    legend.forEach((segments, i) => writeAll(grid, 0, WEB_ROWS + 3 + i, segments))
+    legend.forEach((segments, i) => writeAll(grid, 0, rows + 3 + i, segments))
+  }
+
+  // No axis straight down leaves the row under the web empty; one blank row is enough.
+  if (grid[rows + 1]?.every(cell => cell.char === ' ') === true) {
+    grid.splice(rows + 1, 1)
   }
 
   return runsOf(grid)
@@ -253,8 +260,11 @@ function barOf(fraction: number, width: number, ascii: boolean): string {
   return bar === '' ? '▏' : bar
 }
 
+// Bars past this many cells leave their numbers too far out to read across.
+const SANKEY_BAR_MAX = 40
+
 // Each source with the flows out of it, the bars on one scale across the chart and
-// coloured by where they go.
+// coloured by where they go: one colour per target, so a skin's palette runs out late.
 export function sankeyArt(chart: Sankey, room: number, ascii: boolean): Run[][] | null {
   const links = chart.links
 
@@ -265,7 +275,8 @@ export function sankeyArt(chart: Sankey, room: number, ascii: boolean): Run[][] 
   const most = Math.max(...links.map(link => link.value))
   const targetW = Math.min(20, Math.max(...links.map(link => widthOf(link.to))))
   const valueW = Math.max(...links.map(link => widthOf(formatValue(link.value))))
-  const barW = room - (4 + targetW + 2 + 2 + valueW + 2 + 4)
+  const barW = Math.min(SANKEY_BAR_MAX, room - (4 + targetW + 2 + 2 + valueW + 2 + 4))
+  const targets = [...new Set(links.map(link => link.to))]
 
   if (barW < 6) {
     return null
@@ -273,7 +284,7 @@ export function sankeyArt(chart: Sankey, room: number, ascii: boolean): Run[][] 
 
   const lines: Segment[][] = []
 
-  chart.nodes.forEach((node, i) => {
+  chart.nodes.forEach(node => {
     const out = links.filter(link => link.from === node)
     const total = out.reduce((sum, link) => sum + link.value, 0)
 
@@ -285,7 +296,7 @@ export function sankeyArt(chart: Sankey, room: number, ascii: boolean): Run[][] 
       lines.push([])
     }
 
-    lines.push([seg(cutCell(node, room - 12), series(i)), seg(`  ${formatValue(total)}`, 'muted')])
+    lines.push([seg(cutCell(node, room - 12), 'title'), seg(`  ${formatValue(total)}`, 'muted')])
 
     for (const link of out) {
       const bar = barOf(link.value / most, barW, ascii)
@@ -294,7 +305,7 @@ export function sankeyArt(chart: Sankey, room: number, ascii: boolean): Run[][] 
         seg(ascii ? ' -> ' : '  → ', 'muted'),
         seg(padTo(link.to, targetW), 'fg'),
         seg('  '),
-        seg(bar, series(Math.max(0, chart.nodes.indexOf(link.to)))),
+        seg(bar, series(targets.indexOf(link.to))),
         seg(' '.repeat(Math.max(0, barW - widthOf(bar)))),
         seg(`  ${formatValue(link.value).padStart(valueW)}`, 'fg'),
         seg(`  ${formatPercent(link.value / total).padStart(4)}`, 'muted'),

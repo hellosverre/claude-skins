@@ -28,7 +28,9 @@ const cellsOf = (rect: Rect) => {
   return { x0, y0, w: Math.round(rect.x + rect.w) - x0, h: Math.round((rect.y + rect.h) / CELL_ASPECT) - y0 }
 }
 
-function tile(grid: Grid, rect: Rect, leaf: TreeNode, tone: Tone, ascii: boolean): void {
+// Draws the leaf's tile and says whether it has room for its name; a tile too small for
+// one is shaded in its colour and named beneath the chart instead.
+function tile(grid: Grid, rect: Rect, leaf: TreeNode, tone: Tone, ascii: boolean): boolean {
   const { x0, y0, w, h } = cellsOf(rect)
 
   if (w < 3 || h < 2) {
@@ -36,7 +38,7 @@ function tile(grid: Grid, rect: Rect, leaf: TreeNode, tone: Tone, ascii: boolean
       write(grid, x0, y, (ascii ? ':' : '░').repeat(Math.max(0, w)), tone)
     }
 
-    return
+    return w <= 0 || h <= 0
   }
 
   const [tl, tr, bl, br, across, down] = ascii ? ['+', '+', '+', '+', '-', '|'] : ['┌', '┐', '└', '┘', '─', '│']
@@ -56,6 +58,37 @@ function tile(grid: Grid, rect: Rect, leaf: TreeNode, tone: Tone, ascii: boolean
   if (h >= 3) {
     write(grid, x0 + 1, y0 + 1, cutCell(formatValue(leaf.value), w - 2), 'muted')
   }
+
+  // A name cut down to an ellipsis does not count as one.
+  return widthOf(label) >= Math.min(3, widthOf(leaf.label))
+}
+
+// A single root names the whole chart rather than grouping it, so its children are the
+// sections that take the colours.
+function sectionsOf(chart: Treemap): TreeNode[] {
+  const only = chart.roots.length === 1 ? chart.roots[0] : undefined
+
+  return only !== undefined && only.children.length > 1 ? only.children : chart.roots
+}
+
+// Entries laid out in rows `width` wide, three spaces between them.
+function flowed(entries: readonly Segment[][], width: number): Segment[][] {
+  const rows: Segment[][] = [[]]
+  let used = 0
+
+  for (const entry of entries) {
+    const size = entry.reduce((sum, part) => sum + widthOf(part.text), 0)
+
+    if (used > 0 && used + 3 + size > width) {
+      rows.push([])
+      used = 0
+    }
+
+    rows[rows.length - 1]?.push(...(used > 0 ? [seg('   ')] : []), ...entry.map(part => ({ ...part, text: cutCell(part.text, width) })))
+    used += (used > 0 ? 3 : 0) + size
+  }
+
+  return rows
 }
 
 export function treemapArt(chart: Treemap, room: number, ascii: boolean): Run[][] | null {
@@ -68,14 +101,16 @@ export function treemapArt(chart: Treemap, room: number, ascii: boolean): Run[][
   const height = Math.max(8, Math.min(16, Math.round(width / 5)))
   const grid = gridOf(width, height)
   const plot = { x: 0, y: 0, w: width, h: height * CELL_ASPECT }
-  const sections = squarify(
-    chart.roots.map(root => root.value),
+  const sections = sectionsOf(chart)
+  const areas = squarify(
+    sections.map(section => section.value),
     plot,
   )
+  const unnamed: Segment[][] = []
 
-  chart.roots.forEach((root, i) => {
-    const area = sections[i]
-    const leaves = leavesOf(root)
+  sections.forEach((section, i) => {
+    const area = areas[i]
+    const leaves = leavesOf(section)
 
     if (area === undefined) {
       return
@@ -89,34 +124,23 @@ export function treemapArt(chart: Treemap, room: number, ascii: boolean): Run[][
     leaves.forEach((leaf, k) => {
       const cut = cuts[k]
 
-      if (cut !== undefined) {
-        tile(grid, cut, leaf, series(i), ascii)
+      // A section that is its own leaf is named in the legend already.
+      if (cut !== undefined && !tile(grid, cut, leaf, series(i), ascii) && leaf !== section) {
+        unnamed.push([seg(ascii ? ':' : '░', series(i)), seg(` ${leaf.label} `, 'fg'), seg(formatValue(leaf.value), 'muted')])
       }
     })
   })
 
   // The sections, in their colours, under the tiles: where the nesting shows.
-  const total = chart.roots.reduce((sum, root) => sum + root.value, 0)
-  const legend: Segment[][] = [[]]
-  let used = 0
+  const total = sections.reduce((sum, section) => sum + section.value, 0)
+  const legend = sections.map((section, i) => [
+    seg(ascii ? '#' : '■', series(i)),
+    seg(` ${section.label} `, 'fg'),
+    seg(`${formatValue(section.value)} · ${formatPercent(section.value / total)}`, 'muted'),
+  ])
 
-  chart.roots.forEach((root, i) => {
-    const entry = [seg(ascii ? '#' : '■', series(i)), seg(` ${root.label} `, 'fg'), seg(`${formatValue(root.value)} · ${formatPercent(root.value / total)}`, 'muted')]
-    const size = entry.reduce((sum, part) => sum + widthOf(part.text), 0)
-
-    if (used > 0 && used + 3 + size > width) {
-      legend.push([])
-      used = 0
-    }
-
-    const row = legend[legend.length - 1] ?? []
-    row.push(...(used > 0 ? [seg('   ')] : []), ...entry.map(part => ({ ...part, text: cutCell(part.text, width) })))
-    used += (used > 0 ? 3 : 0) + size
-  })
-
-  return [...runsOf(grid), [], ...runsOfLines(legend)]
+  return [...runsOf(grid), [], ...runsOfLines(flowed(legend, width)), ...(unnamed.length === 0 ? [] : runsOfLines(flowed(unnamed, width)))]
 }
-
 // --- Packet -------------------------------------------------------------------------
 
 export function packetArt(chart: Packet, room: number, ascii: boolean): Run[][] | null {
