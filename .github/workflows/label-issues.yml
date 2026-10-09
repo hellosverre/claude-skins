@@ -1,0 +1,51 @@
+name: Label issues
+
+# Issue forms can only add fixed labels. This reads the "Which part" and "Where" answers
+# from the submitted form and adds the matching area/surface labels. It only ever adds,
+# so labels set by hand during triage are left alone.
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const map = {
+              "Tool rows (rail, icons, shimmer)": ["area: tool rows"],
+              "Tables": ["area: tables"],
+              "Code blocks and diffs": ["area: code & diff"],
+              "Charts, Mermaid or math": ["area: charts"],
+              "Usage band": ["area: usage band"],
+              "Themes and light/dark": ["area: themes"],
+              "/skin commands and settings": ["area: commands"],
+              "Install, update or startup errors": ["area: install"],
+              "Speed or flicker": ["area: performance"],
+              "Terminal (CLI)": ["surface: terminal"],
+              "Desktop app (Code tab)": ["surface: desktop"],
+              "IDE extension (VS Code, JetBrains)": ["surface: ide"],
+              "Both": ["surface: terminal", "surface: desktop"],
+            };
+
+            // A form renders each field as "### <label>\n\n<answer>". Multi-selects are comma-joined,
+            // and some options contain commas themselves, so match known options rather than split.
+            const section = (body, heading) => {
+              const m = body.match(new RegExp(`^### ${heading}[ \\t]*\\n+([^#]*)`, "m"));
+              return m ? m[1].trim() : "";
+            };
+
+            const body = context.payload.issue.body ?? "";
+            const text = [section(body, "Which part"), section(body, "Where(?: you'd use it)?")].join("\n");
+            const labels = [...new Set(Object.keys(map).filter((o) => text.includes(o)).flatMap((o) => map[o]))];
+            if (labels.length === 0) {
+              core.info("No mapped answers in this issue");
+              return;
+            }
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: context.issue.number, labels });
+            core.info(`Added: ${labels.join(", ")}`);
