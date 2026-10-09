@@ -397,6 +397,30 @@ test('on the desktop a shell fence keeps the app’s own block, for its Run butt
   expect(await mixed.find({ type: 'Svg' })).toBeDefined()
 })
 
+test('with tables as text the desktop gets a text grid and the app’s own code block, both selectable', async ($, on) => {
+  stubEngine(on)
+
+  await runSkin($, 'tables text')
+
+  const ui = await $.ui.mount({
+    ...SITE,
+    surface: 'desktop',
+    component: 'AssistantMessage',
+    requestId: 'tx1',
+    props: { text: '| Route | Limit |\n|---|---|\n| /chat | 60 |\n\n```ts\nconst a = 1\n```', isFirstOfReply: true },
+  })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\/chat/ })).toBeDefined()
+  const code = (await ui.find({ type: 'Markdown', text: 'const a' })) as { props: { text: string } } | undefined
+  expect(code?.props.text).toContain('```ts')
+  await ui.unmount()
+
+  await runSkin($, 'tables off')
+
+  const stock = await $.ui.mount({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId: 'tx2', props: { text: '| a |\n|---|\n| 1 |', isFirstOfReply: true } })
+  expect(await stock.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
 test('on the desktop an edit is a diff card and a shell command a terminal card', async ($, on) => {
   stubEngine(on)
 

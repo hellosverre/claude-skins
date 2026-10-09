@@ -4,16 +4,16 @@ export const DEFAULT_PREFS: Prefs = {
   skin: 'noir',
   icons: 'unicode',
   rail: true,
-  tables: true,
+  tables: 'on',
   shimmer: true,
   band: true,
   clipOutput: false,
 }
 
-// The on/off settings, by the word /skin and the settings pane use for each.
+// The on/off settings, by the word /skin and the settings pane use for each. Tables have a
+// third state, `text`, so they are switched on their own.
 export const TOGGLES = {
   rail: 'rail',
-  tables: 'tables',
   shimmer: 'shimmer',
   band: 'band',
   clip: 'clipOutput',
@@ -31,6 +31,21 @@ export type Outcome = {
 const flagOr = (value: unknown, fallback: boolean): boolean =>
   typeof value === 'boolean' ? value : fallback
 
+export const TABLE_MODES = ['on', 'text', 'off'] as const satisfies readonly Prefs['tables'][]
+
+// Tables were on/off before `text`, so a stored boolean still reads.
+export function tablesOr(value: unknown, fallback: Prefs['tables']): Prefs['tables'] {
+  if (typeof value === 'boolean') {
+    return value ? 'on' : 'off'
+  }
+
+  return TABLE_MODES.find(mode => mode === value) ?? fallback
+}
+
+// The settings pane's tables button steps through the modes in order.
+export const nextTables = (mode: Prefs['tables']): Prefs['tables'] =>
+  TABLE_MODES[(TABLE_MODES.indexOf(mode) + 1) % TABLE_MODES.length] ?? 'on'
+
 // What the store hands back may be old, hand-edited or from another version.
 export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
   const saved = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
@@ -43,7 +58,7 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
         : DEFAULT_PREFS.skin,
     icons: saved.icons === 'ascii' ? 'ascii' : 'unicode',
     rail: flagOr(saved.rail, DEFAULT_PREFS.rail),
-    tables: flagOr(saved.tables, DEFAULT_PREFS.tables),
+    tables: tablesOr(saved.tables, DEFAULT_PREFS.tables),
     shimmer: flagOr(saved.shimmer, DEFAULT_PREFS.shimmer),
     band: flagOr(saved.band, DEFAULT_PREFS.band),
     clipOutput: flagOr(saved.clipOutput, DEFAULT_PREFS.clipOutput),
@@ -63,7 +78,7 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
     [
       `icons ${current.icons}`,
       `rail ${onOff(current.rail)}`,
-      `tables ${onOff(current.tables)}`,
+      `tables ${current.tables}`,
       `shimmer ${onOff(current.shimmer)}`,
       `band ${onOff(current.band)}`,
       `clip ${onOff(current.clipOutput)}`,
@@ -96,6 +111,10 @@ export function runSkinCommand(args: string, current: Prefs, names: readonly str
       return current.skin === 'off'
         ? changed({ ...current, skin: DEFAULT_PREFS.skin }, `skin: ${DEFAULT_PREFS.skin}`)
         : changed(current, `skin: ${current.skin}`)
+    case 'tables':
+      return value === 'on' || value === 'text' || value === 'off'
+        ? changed({ ...current, tables: value }, `tables ${value}`)
+        : refused(current, 'usage: /skin tables on|text|off')
     case 'icons':
       return value === 'unicode' || value === 'ascii'
         ? changed({ ...current, icons: value }, `icons: ${value}`)

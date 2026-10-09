@@ -2,7 +2,7 @@ import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
 import type { CustomSkin, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
-import { DEFAULT_PREFS, parsePrefs, runSkinCommand, TOGGLES } from './command'
+import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
 import { forTheme, resolveLight } from './light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
@@ -403,6 +403,7 @@ reply width: ${lastColumns} columns`
     return settingsPane(look, ui, { names: skinNames(custom), editing, width: e.props.bodyColumns }, {
       pick: name => void commit($, { ...state, prefs: { ...prefs, skin: name } }),
       toggle: word => void commit($, { ...state, prefs: { ...prefs, [TOGGLES[word]]: !prefs[TOGGLES[word]] } }),
+      tables: () => void commit($, { ...state, prefs: { ...prefs, tables: nextTables(prefs.tables) } }),
       icons: () =>
         void commit($, { ...state, prefs: { ...prefs, icons: prefs.icons === 'unicode' ? 'ascii' : 'unicode' } }),
       edit: slot => void update($, editingAtom, () => slot),
@@ -517,7 +518,7 @@ reply width: ${lastColumns} columns`
 
     const text = e.props.text
 
-    if (active === null || !active.prefs.tables || !/\||```|~~~/.test(text)) {
+    if (active === null || active.prefs.tables === 'off' || !/\||```|~~~/.test(text)) {
       return next(e)
     }
 
@@ -532,14 +533,16 @@ reply width: ${lastColumns} columns`
       return next(e)
     }
 
-    // Every surface's table names Svg, but the terminal draws it as nothing.
+    // Every surface's table names Svg, but the terminal draws it as nothing. As text, tables
+    // are text grids and code the app's own selectable blocks.
     const ui = $.ui.resolve(e)
+    const svg = e.surface !== 'terminal' && active.prefs.tables === 'on' && 'Svg' in ui ? ui.Svg : undefined
     lastColumns = e.viewport?.columns
     const copy = (copied: string) => {
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }, segments, e.viewport?.columns ?? 100, e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : undefined)
+    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
   })
 
   // The terminal's spinner gets the skin's word with a shimmer; the desktop's keeps its
