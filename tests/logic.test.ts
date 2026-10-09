@@ -760,6 +760,29 @@ test('series colours skip a colour the skin gives two slots', async () => {
   expect(colors[2]).toBe(palette.warn.toLowerCase())
 })
 
+test('a series colour close to an earlier one waits until the distinct ones run out', async () => {
+  const palette = rosePine.palette
+  const colors = [3, 4, 5].map(i => seriesColor(palette, i))
+
+  expect(colors).toEqual([palette.web, palette.err, palette.mcp].map(color => color.toLowerCase()))
+})
+
+test('a treemap tile whose name would be cut to a stub is shaded and named under the chart', async () => {
+  const treemap = parseMermaid(
+    [
+      'treemap-beta',
+      '"Compute"\n    "EC2": 420\n    "Lambda": 160\n    "Fargate": 95',
+      '"Storage"\n    "S3": 210\n    "EBS": 120\n    "Glacier": 18',
+      '"Data"\n    "RDS": 260\n    "DynamoDB": 90\n    "Redshift"\n        "Nodes": 140\n        "Spectrum": 35',
+      '"Network": 75',
+    ].join('\n'),
+  ) as Treemap
+  const text = chartArt(treemap, 80, false)?.rows.map(row => row.map(segment => segment.text).join('')).join('\n') ?? ''
+
+  expect(text).not.toMatch(/G…|Gl…/)
+  expect(text).toContain('░ Glacier 18')
+})
+
 test('a block link with no straight run turns one corner instead of being listed', async () => {
   const block = parseMermaid('block-beta\n  columns 3\n  a["Web"] b["API"] c["Worker"]\n  space:3\n  d[("Postgres")] space:2\n  c --> d') as Block
   const text = chartArt(block, 100, false)?.rows.map(row => row.map(segment => segment.text).join('')).join('\n') ?? ''

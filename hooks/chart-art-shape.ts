@@ -1,5 +1,5 @@
 import { blit, dot, dotsOf, gridOf, line, padTo, runsOf, runsOfLines, seg, stamp, write, writeAll } from './art-canvas'
-import type { Segment } from './art-canvas'
+import type { Dots, Segment } from './art-canvas'
 import { cutCell, widthOf } from './markdown'
 import { formatPercent, formatValue } from './mermaid'
 import type { GitGraph, MindNode, Mindmap, Quadrant, Radar, Sankey } from './mermaid'
@@ -175,22 +175,25 @@ export function radarArt(chart: Radar, room: number, ascii: boolean): Run[][] | 
   const angle = (k: number): number => -Math.PI / 2 + (2 * Math.PI * k) / n
   const at = (k: number, r: number): [number, number] => [centre + r * Math.cos(angle(k)), centre + r * Math.sin(angle(k))]
   const span = chart.max - chart.min || 1
+
+  // The web dotted, a dot every few, so it sits behind the solid curves instead of
+  // competing with them.
   for (let k = 0; k < n; k++) {
-    line(dots, centre, centre, ...at(k, radius), 'muted')
+    dotted(dots, centre, centre, ...at(k, radius))
   }
 
   for (let t = 1; t <= chart.ticks; t++) {
     const r = (radius * t) / chart.ticks
 
     if (chart.graticule === 'circle') {
-      const steps = Math.ceil(2 * Math.PI * r)
+      const steps = Math.max(n, Math.ceil((2 * Math.PI * r) / WEB_GAP))
 
       for (let s = 0; s < steps; s++) {
         dot(dots, centre + r * Math.cos((2 * Math.PI * s) / steps), centre + r * Math.sin((2 * Math.PI * s) / steps), 'muted')
       }
     } else {
       for (let k = 0; k < n; k++) {
-        line(dots, ...at(k, r), ...at(k + 1, r), 'muted')
+        dotted(dots, ...at(k, r), ...at(k + 1, r))
       }
     }
   }
@@ -236,6 +239,17 @@ export function radarArt(chart: Radar, room: number, ascii: boolean): Run[][] | 
   }
 
   return runsOf(grid)
+}
+
+// How many dots apart the web's dots fall.
+const WEB_GAP = 3
+
+function dotted(dots: Dots, x0: number, y0: number, x1: number, y1: number): void {
+  const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / WEB_GAP))
+
+  for (let s = 0; s <= steps; s++) {
+    dot(dots, x0 + ((x1 - x0) * s) / steps, y0 + ((y1 - y0) * s) / steps, 'muted')
+  }
 }
 
 const widthOfSegments = (segments: readonly Segment[]): number =>

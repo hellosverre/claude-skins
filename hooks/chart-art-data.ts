@@ -32,17 +32,19 @@ const cellsOf = (rect: Rect) => {
 // one is shaded in its colour and named beneath the chart instead.
 function tile(grid: Grid, rect: Rect, leaf: TreeNode, tone: Tone, ascii: boolean): boolean {
   const { x0, y0, w, h } = cellsOf(rect)
+  const label = cutCell(leaf.label, Math.max(0, w - 2))
+  // A name cut down to a stub ("Br…") says less than the list under the chart does.
+  const isStub = label !== leaf.label && widthOf(label) < 4
 
-  if (w < 3 || h < 2) {
+  if (w < 3 || h < 2 || isStub) {
     for (let y = y0; y < y0 + h; y++) {
       write(grid, x0, y, (ascii ? ':' : '░').repeat(Math.max(0, w)), tone)
     }
 
-    return w <= 0 || h <= 0
+    return (w <= 0 || h <= 0) && !isStub
   }
 
   const [tl, tr, bl, br, across, down] = ascii ? ['+', '+', '+', '+', '-', '|'] : ['┌', '┐', '└', '┘', '─', '│']
-  const label = cutCell(leaf.label, w - 2)
 
   // The name sits in the top edge, so a tile two rows tall still says what it is.
   write(grid, x0, y0, `${tl}${label}${across.repeat(w - 2 - widthOf(label))}${tr}`, tone)
