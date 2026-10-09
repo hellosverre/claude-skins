@@ -177,14 +177,16 @@ export function radarArt(chart: Radar, room: number, ascii: boolean): Run[][] | 
   const span = chart.max - chart.min || 1
 
   // The web dotted, a dot every few, so it sits behind the solid curves instead of
-  // competing with them.
+  // competing with them. Rings too small to read as rings are left out, and the spokes
+  // start at the first ring drawn, so the middle stays clear rather than a knot of dots.
+  const rings = Array.from({ length: chart.ticks }, (_, t) => (radius * (t + 1)) / chart.ticks).filter(r => r >= radius * WEB_INNER)
+  const inner = rings[0] ?? radius
+
   for (let k = 0; k < n; k++) {
-    dotted(dots, centre, centre, ...at(k, radius))
+    dotted(dots, ...at(k, inner), ...at(k, radius))
   }
 
-  for (let t = 1; t <= chart.ticks; t++) {
-    const r = (radius * t) / chart.ticks
-
+  for (const r of rings) {
     if (chart.graticule === 'circle') {
       const steps = Math.max(n, Math.ceil((2 * Math.PI * r) / WEB_GAP))
 
@@ -243,6 +245,8 @@ export function radarArt(chart: Radar, room: number, ascii: boolean): Run[][] | 
 
 // How many dots apart the web's dots fall.
 const WEB_GAP = 3
+// The smallest ring drawn, as a share of the web's radius.
+const WEB_INNER = 0.4
 
 function dotted(dots: Dots, x0: number, y0: number, x1: number, y1: number): void {
   const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / WEB_GAP))
