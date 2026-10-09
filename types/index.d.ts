@@ -62,6 +62,10 @@ export type UsageSnap = { context: number | null; limits: { label: string; perce
 // What one turn did, shown in its footer.
 export type TurnStats = { tools: number; added: number; removed: number }
 
+// How a tool row stands: opened or closed by the person, or `auto`, open only when the
+// call failed.
+export type Disclosure = 'auto' | 'open' | 'closed'
+
 declare module 'claude-code' {
   interface PluginState {
     skins: {
@@ -78,6 +82,9 @@ declare module 'claude-code' {
       quiet: StateFamily<boolean>
       // A shell call's command, for its output card's header: ToolResult does not carry it.
       command: StateFamily<string>
+      // Each tool row's chevron, and whether its opened answer shows past the fold.
+      disclosure: StateFamily<Disclosure>
+      showAll: StateFamily<boolean>
       compacting: boolean
       pinned: boolean
       lastReply: string

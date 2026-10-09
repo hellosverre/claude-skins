@@ -103,7 +103,7 @@ Drawn by the mod's own card code (`scripts/previews.ts`), not screenshots.
 
 | Part | Desktop app | Terminal |
 |---|---|---|
-| Tool calls | Icon per kind, spinner while running, lines changed, time taken | A node on the turn's rail |
+| Tool calls | Icon per kind, spinner while running, lines changed, time taken. `▸` opens the row: the call's input in full and its answer (a read's text with line numbers, a search's matches, the shell card, the diff); a failed call opens by itself | A node on the turn's rail, with the same `▸` |
 | Edits | Diff card with `+N −M` and numbered lines | Claude Code's own diff |
 | Shell commands | Terminal card with status, stderr apart, long output folded | Card with the command, `✓` or `✗ exit N`, stderr in red under its own label, each stream folded to 8 + 4 lines (`/skin shell off` for Claude Code's own) |
 | Quiet output (off by default) | Reads, searches and read-only commands fold to one row; a failure keeps its error line | The same |
@@ -138,6 +138,7 @@ scripts/bench.sh
 
 | What | What you get instead | Where |
 |---|---|---|
+| An opened row for an image, PDF or notebook read, a background command, or an answer it cannot read | Claude Code's own row, drawn in the opened row | `bodyOf` in [`hooks/detail.ts`](hooks/detail.ts); test "an opened image Read is Claude Code's own drawing…" |
 | Agents, plan mode, todos, the permission prompt | Claude Code's own rows and dialogs | `kindOf` in [`hooks/tools.ts`](hooks/tools.ts); test "tools a skin cannot redraw faithfully keep their own row" |
 | Edits on the terminal, failed edits everywhere | Claude Code's own diff | [`hooks/register.tsx`](hooks/register.tsx) `ToolResult`; test "on the desktop an edit is a diff card…" |
 | Code blocks on the terminal | Claude Code's own markdown | `replyRows` in [`hooks/rows.tsx`](hooks/rows.tsx); test "a code fence is a card on the desktop and stays markdown in the terminal" |
@@ -168,7 +169,7 @@ the README does not say.
 | Platforms named | Windows by hand, Linux by tests ([compat](docs/compat.md)) | macOS terminal by hand; CI on macOS, Linux, Windows | Windows, macOS, Linux | Terminal and desktop app | Windows guide in its docs |
 | Themes | 15, repaint any colour, or have Claude design one | 15 and `mono`, 20 colour slots | Your own, for Claude Code's whole UI | | Powerline themes |
 | Recolours Claude Code's own UI | No | No | **Yes** | No | No |
-| Tool rows | Icons, timings, rail | 4 styles | | No | No |
+| Tool rows | Icons, timings, rail; open to the input and answer | 4 styles | | No | No |
 | Read-only output hidden | `/skin quiet` | `toolOutput: quiet` | | No | No |
 | Edit diffs | Card on the desktop | Claude Code's own | | No | No |
 | Shell output | Card on both surfaces | Boxed in expanded groups | | No | No |

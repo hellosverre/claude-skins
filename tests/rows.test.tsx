@@ -92,6 +92,14 @@ function stubEngine(on: On, own: { env?: boolean; store?: boolean; toast?: boole
 const toolUse = (props: ReturnType<typeof call>, surface: (typeof SURFACES)[number] = 'terminal') =>
   ({ ...SITE, surface, component: 'ToolUse', requestId: props.tool_use_id, props }) as const
 
+// A failed call's row opens by itself and draws the answer there; closed, the answer is
+// its ToolResult's again.
+async function closeRow($: Engine, id: string, tool = 'Bash') {
+  const row = await $.ui.mount(toolUse(call(tool, { command: '' }, { tool_use_id: id, isErrored: true })))
+  await row.press({ key: 'disclose' })
+  await row.unmount()
+}
+
 test('a Bash call is a node on the terminal\u2019s rail and an icon row on the desktop', async ($, on) => {
   stubEngine(on)
 
@@ -903,6 +911,7 @@ test('quiet output folds a read-only call to its row, a failure to its error lin
   expect(await quiet.find({ type: 'Text', text: 'On branch main' })).toBeUndefined()
   await quiet.unmount()
 
+  await closeRow($, q1)
   const failed = await $.ui.mount(result(q1, 'Bash', { stdout: '', stderr: 'fatal: not a git repository', interrupted: false }, true))
   expect(await failed.find({ type: 'Text', text: '✖ fatal: not a git repository' })).toBeDefined()
   await failed.unmount()
@@ -1069,6 +1078,8 @@ test('a failed shell call shows its exit code, and stderr under its own label in
   const [id = '', other = ''] = await ranShells($, on, ['pnpm tsc', 'pnpm lint'])
   const palette = noir.palette
 
+  await closeRow($, id)
+  await closeRow($, other)
   const record = await $.ui.mount(shellResult(id, { stdout: 'src/server.ts', stderr: 'error TS2322: Type string is not assignable to number', interrupted: false }, true))
   expect(await record.find({ type: 'Text', text: '✗ failed' })).toBeDefined()
   expect(await record.find({ type: 'Text', text: 'stderr' })).toBeDefined()
@@ -1144,6 +1155,7 @@ test('/skin calm stills the spinner, drops the rail, folds read-only output and 
 
   // A failure is drawn whole: every stderr line, not quiet's one line or the fold.
   const stderr = Array.from({ length: 30 }, (_, i) => `error ${i + 1}`).join('\n')
+  await closeRow($, look)
   const failed = await $.ui.mount(shellResult(look, { stdout: '', stderr, interrupted: false }, true))
   expect(await failed.find({ type: 'Text', text: '✗ failed' })).toBeDefined()
   expect(await failed.find({ type: 'Text', text: 'error 15' })).toBeDefined()
