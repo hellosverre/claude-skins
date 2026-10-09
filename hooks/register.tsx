@@ -4,7 +4,7 @@ import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-cod
 import type { CustomSkin, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
 import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
-import { forTheme, resolveLight } from './light'
+import { forTheme, gnomeDark, macDark, resolveLight, windowsDark } from './light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
 import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
@@ -39,6 +39,8 @@ const CLIP_HEAD = 8
 const CLIP_TAIL = 4
 const FRAME_MS = 90
 const KEPT_TURNS = 40
+// How often an `auto` theme asks the system again: nothing tells a plugin it changed.
+const APPEARANCE_MS = 5000
 
 const prefsAtom = atom({ plugin: 'skins', key: 'prefs' } as const, DEFAULT_PREFS)
 const customAtom = atom({ plugin: 'skins', key: 'custom' } as const, {})
@@ -71,41 +73,75 @@ async function activeSkin($: EngineInterface): Promise<Active | null> {
   return skin === undefined ? null : { prefs, skin: forTheme(skin, await read($, lightAtom)), custom }
 }
 
-// The system's appearance, for an `auto` theme: macOS's AppleInterfaceStyle, else GNOME's
-// color-scheme. Undefined when neither answers.
+// Where each system keeps its appearance, and how to read the answer.
+const PROBES = [
+  { argv: ['defaults', 'read', '-g', 'AppleInterfaceStyle'], dark: macDark },
+  {
+    argv: ['reg', 'query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', '/v', 'AppsUseLightTheme'],
+    dark: windowsDark,
+  },
+  { argv: ['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'], dark: gnomeDark },
+] as const
+
+// The probe that answered last, so the timer asks one system rather than all three.
+let answering: (typeof PROBES)[number] | undefined
+
+// The system's appearance, for an `auto` theme. Undefined when no probe answers.
 async function systemDark($: EngineInterface): Promise<boolean | undefined> {
-  try {
-    const mac = await $.process.run(['defaults', 'read', '-g', 'AppleInterfaceStyle'], { timeoutMs: 2000 })
+  for (const probe of answering === undefined ? PROBES : [answering, ...PROBES]) {
+    try {
+      const dark = probe.dark(await $.process.run([...probe.argv], { timeoutMs: 2000 }))
 
-    // Unset (exit 1, "does not exist") is how macOS says light.
-    return mac.exitCode === 0 ? mac.stdout.trim() === 'Dark' : /does not exist/.test(mac.stderr) ? false : undefined
-  } catch {}
-
-  try {
-    const gnome = await $.process.run(['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'], {
-      timeoutMs: 2000,
-    })
-
-    return gnome.exitCode === 0 ? gnome.stdout.includes('dark') : undefined
-  } catch {
-    return undefined
+      if (dark !== undefined) {
+        answering = probe
+        return dark
+      }
+    } catch {
+      // The other systems' tools are missing here; that is expected, not a failure.
+    }
   }
+
+  answering = undefined
+  return undefined
 }
 
 // Claude Code's own theme decides whether skins draw for a light or a dark background:
 // `SKINS_THEME` first, then the theme setting, and for `auto` the terminal and the system.
-async function refreshTheme($: EngineInterface): Promise<void> {
-  const rows = await $.config.list()
+// `theme` is a value just written, which `$.config.list()` does not answer with yet.
+// Resolves true when the answer came from the system's appearance, which can change under it.
+async function refreshTheme($: EngineInterface, theme?: unknown): Promise<boolean> {
   const hints = {
     override: await $.env.get('SKINS_THEME'),
-    theme: rows.find(row => row.key === 'theme')?.value,
+    theme: theme ?? (await $.config.list()).find(row => row.key === 'theme')?.value,
     colorfgbg: await $.env.get('COLORFGBG'),
   }
   // Asks the system only when nothing before it decided.
   const needsSystem = resolveLight(hints) !== resolveLight({ ...hints, systemDark: false })
-  const isLight = resolveLight({ ...hints, systemDark: needsSystem ? await systemDark($) : undefined })
+  const dark = needsSystem ? await systemDark($) : undefined
+  const isLight = resolveLight({ ...hints, systemDark: dark })
 
-  await update($, lightAtom, () => isLight)
+  // A write redraws every row, and the system is asked again every few seconds.
+  if ((await read($, lightAtom)) !== isLight) {
+    await update($, lightAtom, () => isLight)
+  }
+
+  return dark !== undefined
+}
+
+// Asks the system again on a timer while the theme follows it; any other theme stops it.
+let appearance: Timer | undefined
+
+async function followTheme($: EngineInterface, theme?: unknown): Promise<void> {
+  const followsSystem = await refreshTheme($, theme)
+
+  appearance?.cancel()
+  appearance = followsSystem
+    ? $.clock.every(APPEARANCE_MS, () => {
+        void refreshTheme($).catch((error: unknown) => {
+          $.ui.log(error instanceof Error ? error.message : String(error), { to: 'debug' })
+        })
+      })
+    : undefined
 }
 
 // Every surface's element table names Svg, but the terminal draws it as nothing, so
@@ -265,7 +301,7 @@ export const register: Register = on => {
     })
     await load($)
     await refreshUsage($)
-    await refreshTheme($)
+    await followTheme($)
 
     // Off the start's path: a slow or offline network must not hold the session up.
     void checkForUpdate($).catch((error: unknown) => {
@@ -286,7 +322,7 @@ export const register: Register = on => {
   // /clear, /resume and /branch reset $.state to its defaults and skip session.start.
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
     await load($)
-    await refreshTheme($)
+    await followTheme($)
 
     return next(e)
   })
@@ -303,8 +339,9 @@ export const register: Register = on => {
   on('config.set', async ($, e, next) => {
     const result = await next(e)
 
-    if (e.key === 'theme') {
-      await refreshTheme($)
+    // The written value: inside this hook $.config.list() still answers with the old one.
+    if (e.key === 'theme' && result.deny === undefined) {
+      await followTheme($, result.value)
     }
 
     return result

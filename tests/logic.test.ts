@@ -11,7 +11,7 @@ import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/sv
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
 import { limitLabel, meterColor, metersOf, usageSvg } from '../hooks/svg-usage'
 import { isNewer, updateNotice } from '../hooks/updates'
-import { deepen, isLightTheme, resolveLight, toLight } from '../hooks/light'
+import { deepen, gnomeDark, isLightTheme, macDark, resolveLight, toLight, windowsDark } from '../hooks/light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
 import tokyoNight from '../hooks/themes/tokyo-night'
@@ -330,4 +330,22 @@ test('a release is newer by its first differing part, and anything not x.y.z nev
   expect(isNewer('1.0.0-beta', '0.1.2')).toBe(false)
   expect(isNewer('0.1.3', 'dev')).toBe(false)
   expect(updateNotice('0.1.3', '0.1.2')).toBe('skins 0.1.3 is out (you have 0.1.2). Run: claude plugin update skins@hellosverre-mods, then restart')
+})
+
+test('each system says dark, light, or nothing', async () => {
+  const ran = (exitCode: number, stdout: string, stderr = '') => ({ exitCode, stdout, stderr })
+  const windows = (value: string) =>
+    ran(0, `\r\nHKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\r\n    AppsUseLightTheme    REG_DWORD    ${value}\r\n\r\n`)
+
+  expect(macDark(ran(0, 'Dark\n'))).toBe(true)
+  expect(macDark(ran(1, '', 'The domain/default pair of (kCFPreferencesAnyApplication, AppleInterfaceStyle) does not exist'))).toBe(false)
+  expect(macDark(ran(127, '', 'command not found'))).toBe(undefined)
+
+  expect(windowsDark(windows('0x0'))).toBe(true)
+  expect(windowsDark(windows('0x1'))).toBe(false)
+  expect(windowsDark(ran(1, '', 'ERROR: The system was unable to find the specified registry key or value.'))).toBe(undefined)
+
+  expect(gnomeDark(ran(0, "'prefer-dark'\n"))).toBe(true)
+  expect(gnomeDark(ran(0, "'default'\n"))).toBe(false)
+  expect(gnomeDark(ran(1, '', 'No such schema'))).toBe(undefined)
 })
