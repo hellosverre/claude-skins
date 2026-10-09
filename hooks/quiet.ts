@@ -203,7 +203,7 @@ export function isReadOnlyShell(command: string, shell: Shell = 'bash'): boolean
 
 const QUIET_TOOLS = new Set(['Read', 'Glob', 'Grep'])
 
-const commandOf = (input: unknown): string => {
+export const commandOf = (input: unknown): string => {
   const command = typeof input === 'object' && input !== null ? (input as { command?: unknown }).command : undefined
 
   return typeof command === 'string' ? command : ''

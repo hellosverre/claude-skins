@@ -175,7 +175,8 @@ function stack(look: Look, line: ReturnType<Ui['Text']>) {
 function iconRow(look: Look, Svg: SvgElement, kind: Kind, calls: readonly Call[], line: ReturnType<Ui['Text']>) {
   const { Box } = look.ui
   const { color } = status(look, calls)
-  const source = toolIcon(kind, color, calls.some(call => call.isRunning))
+  // Calm keeps a running icon still.
+  const source = toolIcon(kind, color, look.prefs.calm === null && calls.some(call => call.isRunning))
 
   return (
     <Box flexDirection="row" columnGap={1} alignItems="center">
@@ -400,7 +401,7 @@ const tableMarkdown = (table: Table): string =>
   [table.header, table.header.map(() => '---'), ...table.rows].map(cells => `| ${cells.join(' | ')} |`).join('\n')
 
 // A Copy button padded to sit on a border line; nothing where nothing can copy.
-function copyButton(look: Look, key: string, text: string) {
+export function copyButton(look: Look, key: string, text: string) {
   const { Button } = look.ui
   const copy = look.copy
 

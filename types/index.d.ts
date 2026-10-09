@@ -34,7 +34,15 @@ export type Prefs = {
   math: boolean
   // Tables and code in slash-command output drawn the way replies are.
   commands: boolean
+  // Shell output as a card: the command, its exit status, stderr apart, long output folded.
+  shell: boolean
+  // While /skin calm is on, the parts it changed as they were before it, for calm off to
+  // put back; null while it is off.
+  calm: CalmSnapshot | null
 }
+
+// The prefs /skin calm changes: no shimmer, no rail line above each tool row, quiet output.
+export type CalmSnapshot = { shimmer: boolean; rail: boolean; quiet: boolean }
 
 // A skin someone made in the settings pane or through their agent: a built-in skin
 // with some slots and words changed.
@@ -68,6 +76,8 @@ declare module 'claude-code' {
       isLight: boolean
       images: StateFamily<boolean>
       quiet: StateFamily<boolean>
+      // A shell call's command, for its output card's header: ToolResult does not carry it.
+      command: StateFamily<string>
       compacting: boolean
       pinned: boolean
       lastReply: string

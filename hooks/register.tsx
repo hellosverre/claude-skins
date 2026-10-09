@@ -2,7 +2,7 @@ import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
 import type { CustomSkin, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
-import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES } from './command'
+import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES, withCalm } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
 import { forTheme, gnomeDark, macDark, resolveLight, windowsDark } from './light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
@@ -19,6 +19,8 @@ import { commandSegments } from './command-output'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
+import { SHELLS, shellResultOf } from './shell'
+import { shellRows } from './shell-rows'
 import { settingsPane } from './settings'
 import { sightings } from './sightings'
 import { ICONS } from './skin'
@@ -28,7 +30,7 @@ import { shellOutputOf } from './svg-terminal'
 import { limitLabel, metersOf } from './svg-usage'
 import { shortenPath } from './format'
 import { kindOf, summarize } from './tools'
-import { errorLine, isQuiet, quietLabel } from './quiet'
+import { commandOf, errorLine, isQuiet, quietLabel } from './quiet'
 import { isDue, isNewer, LATEST_URL, updateNotice, versionOf } from './updates'
 import type { Checked } from './updates'
 
@@ -60,6 +62,7 @@ const lightAtom = atom({ plugin: 'skins', key: 'isLight' } as const, false)
 const imagesAtom = atom({ plugin: 'skins', key: 'images' } as const, false)
 // Whether a call only looked, so quiet output folds its result away.
 const quietAtom = atom({ plugin: 'skins', key: 'quiet' } as const, false)
+const commandAtom = atom({ plugin: 'skins', key: 'command' } as const, '')
 const usageAtom = atom({ plugin: 'skins', key: 'usage' } as const, { context: null, limits: [] } as UsageSnap)
 const compactingAtom = atom({ plugin: 'skins', key: 'compacting' } as const, false)
 const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
@@ -176,6 +179,8 @@ const lookOf = (
 // (the message id, the tool_use_id) so two replies never share a card.
 const seenCards = sightings()
 const drawnOnce = (instance: string) => (key: string) => seenCards(`${instance}:${key}`)
+// Calm draws every card settled, its first draw included.
+const firstDraws = (prefs: Prefs, instance: string) => (prefs.calm === null ? drawnOnce(instance) : () => false)
 
 // Made skins from the store, each checked again: the store may hold an older shape.
 function parseCustom(raw: unknown): Record<string, CustomSkin> {
@@ -302,7 +307,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | copy | copy code | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | icons]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | shell | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -396,6 +401,12 @@ export const register: Register = on => {
 
   // Times every call and counts the main loop's calls and changed lines.
   on('tool.call', async ($, e, next) => {
+    // Its output card's header names the command, which the result does not carry.
+    if (SHELLS.has(e.tool)) {
+      const command = commandOf(e)
+      await update($, memberOf(commandAtom, { requestId: e.tool_use_id }), () => command)
+    }
+
     const startedAt = await $.clock.now()
     const ran = await next(e)
     const ms = (await $.clock.now()) - startedAt
@@ -504,6 +515,7 @@ reply width: ${lastColumns} columns`
     return settingsPane(look, ui, { names: skinNames(custom), editing, width: e.props.bodyColumns }, {
       pick: name => void commit($, { ...state, prefs: { ...prefs, skin: name } }),
       toggle: word => void commit($, { ...state, prefs: { ...prefs, [TOGGLES[word]]: !prefs[TOGGLES[word]] } }),
+      calm: () => void commit($, { ...state, prefs: withCalm(prefs, prefs.calm === null) }),
       tables: () => void commit($, { ...state, prefs: { ...prefs, tables: nextTables(prefs.tables) } }),
       icons: () =>
         void commit($, { ...state, prefs: { ...prefs, icons: prefs.icons === 'unicode' ? 'ascii' : 'unicode' } }),
@@ -573,11 +585,13 @@ reply width: ${lastColumns} columns`
     const copy = (text: string) => {
       void $.ui.copy({ text, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
-    const look = active === null ? undefined : { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }
+    const look = active === null ? undefined : { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }
     const columns = e.viewport?.columns ?? 100
+    // Calm never folds a failure away: it is drawn whole, past quiet and the clip.
+    const isCalmFailure = look !== undefined && look.prefs.calm !== null && e.props.isErrored
 
     // A call that only looked folds away; a failure keeps the line that says why.
-    if (look !== undefined && look.prefs.quiet && (await read($, memberOf(quietAtom, e)))) {
+    if (look !== undefined && look.prefs.quiet && !isCalmFailure && (await read($, memberOf(quietAtom, e)))) {
       return quietResult(look, e.props.isErrored ? errorLine(e.props.output) : null)
     }
 
@@ -590,7 +604,7 @@ reply width: ${lastColumns} columns`
       }
     }
 
-    if (look?.svg !== undefined && e.props.tool === 'Bash') {
+    if (look?.svg !== undefined && look.prefs.shell && SHELLS.has(e.props.tool)) {
       const shell = shellOutputOf(e.props.output)
 
       if (shell !== null) {
@@ -598,7 +612,21 @@ reply width: ${lastColumns} columns`
       }
     }
 
-    if (!active?.prefs.clipOutput || e.props.tool !== 'Bash' || typeof output?.stdout !== 'string') {
+    // The terminal's card is text: the command and its exit status, stderr apart, folded.
+    if (look !== undefined && e.surface === 'terminal' && look.prefs.shell && SHELLS.has(e.props.tool)) {
+      const shell = shellResultOf(e.props.output, e.props.isErrored)
+
+      if (shell !== null) {
+        const fold = { head: CLIP_HEAD, tail: CLIP_TAIL }
+
+        return shellRows(look, await read($, memberOf(commandAtom, e)), shell, e.props.isErrored, {
+          stdout: fold,
+          stderr: isCalmFailure ? null : fold,
+        })
+      }
+    }
+
+    if (!active?.prefs.clipOutput || isCalmFailure || e.props.tool !== 'Bash' || typeof output?.stdout !== 'string') {
       return next(e)
     }
 
@@ -691,7 +719,7 @@ reply width: ${lastColumns} columns`
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
+    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: firstDraws(prefs, e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
   })
 
   // A slash command's output (`/cost`, `/context`, a plugin's) drawn the way a reply is: its
@@ -716,7 +744,7 @@ reply width: ${lastColumns} columns`
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
+    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
   })
 
   // The terminal's spinner gets the skin's word with a shimmer; the desktop's keeps its
@@ -731,7 +759,8 @@ reply width: ${lastColumns} columns`
     if (e.surface !== 'terminal') {
       const look = lookOf($.ui.resolve(e), active, e.surface)
 
-      return look.svg === undefined
+      // Calm keeps the app's own, quieter spinner.
+      return look.svg === undefined || active.prefs.calm !== null
         ? next(e)
         : desktopSpinnerRow(look, look.svg, e.props.mode, e.props.message ?? e.props.word)
     }
