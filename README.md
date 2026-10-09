@@ -3,7 +3,7 @@
 A modern skin for Claude Code. A [mod](https://code.claude.com/docs/en/plugins/mods/overview) that
 redraws the transcript: tool calls with icons and timings, edits as diff cards, tables and code as
 animated cards, shell output in a terminal card, a spinner that shows what Claude is doing, and a band
-above the prompt with your context and plan limits and a Compact button. Seven skins, light and dark,
+above the prompt with your context and plan limits and a Compact button. Fifteen skins, light and dark,
 a settings page, and your own agent can design a new skin with you.
 
 <img alt="The same Claude Code turn switching skins with /skin: noir, Tokyo Night, Dracula, Catppuccin" src="docs/demo.gif">

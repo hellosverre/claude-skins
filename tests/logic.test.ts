@@ -13,6 +13,7 @@ import { limitLabel, meterColor, metersOf, usageSvg } from '../hooks/svg-usage'
 import { deepen, isLightTheme, resolveLight, toLight } from '../hooks/light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
+import { SKINS } from '../hooks/themes'
 import tokyoNight from '../hooks/themes/tokyo-night'
 
 const NAMES = ['tokyo-night', 'dracula', 'nord']
@@ -308,4 +309,22 @@ test('a pinned folder keeps its own prefs, others follow the default', async () 
   expect(prefsFor('/c', folders, DEFAULT_PREFS)).toBe(DEFAULT_PREFS)
   expect(Object.keys(withoutFolder(withFolder(folders, '/c', pinned), '/a'))).toEqual(['/b', '/c'])
   expect(parseFolders('junk', NAMES)).toEqual({})
+})
+
+test('every built-in skin names itself once and fills every slot with a colour, light palette too', async () => {
+  const hex = /^#[0-9a-f]{6}$/
+  const slots = Object.keys(tokyoNight.palette)
+
+  expect(SKINS.length).toBe(15)
+  expect(new Set(SKINS.map(skin => skin.name)).size).toBe(SKINS.length)
+
+  for (const skin of SKINS) {
+    for (const palette of [skin.palette, ...(skin.light === undefined ? [] : [skin.light])]) {
+      expect(Object.keys(palette).sort()).toEqual([...slots].sort())
+      expect(Object.values(palette).every(value => hex.test(value))).toBe(true)
+    }
+
+    expect(skin.spinner.length).toBeGreaterThan(0)
+    expect(skin.done.length).toBeGreaterThan(0)
+  }
 })
