@@ -11,6 +11,8 @@ export const DEFAULT_PREFS: Prefs = {
   markdown: true,
   quiet: false,
   charts: true,
+  math: true,
+  commands: true,
 }
 
 // The on/off settings, by the word /skin and the settings pane use for each. Tables have a
@@ -23,6 +25,8 @@ export const TOGGLES = {
   markdown: 'markdown',
   quiet: 'quiet',
   charts: 'charts',
+  math: 'math',
+  commands: 'commands',
 } as const satisfies Record<string, keyof Prefs>
 
 export type ToggleWord = keyof typeof TOGGLES
@@ -71,6 +75,8 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
     markdown: flagOr(saved.markdown, DEFAULT_PREFS.markdown),
     quiet: flagOr(saved.quiet, DEFAULT_PREFS.quiet),
     charts: flagOr(saved.charts, DEFAULT_PREFS.charts),
+    math: flagOr(saved.math, DEFAULT_PREFS.math),
+    commands: flagOr(saved.commands, DEFAULT_PREFS.commands),
   }
 }
 
@@ -94,6 +100,8 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
       `markdown ${onOff(current.markdown)}`,
       `quiet ${onOff(current.quiet)}`,
       `charts ${onOff(current.charts)}`,
+      `math ${onOff(current.math)}`,
+      `commands ${onOff(current.commands)}`,
     ].join(' · '),
   ].join('\n')
 

@@ -25,6 +25,8 @@ import type { ShellOutput } from './svg-terminal'
 import { usageLine, usageSvg } from './svg-usage'
 import type { Meter } from './svg-usage'
 import { kindOf, toolLabel } from './tools'
+import { inlineMath, mathArt, parseTex } from './math'
+import { mathSvg } from './svg-math'
 
 export type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Markdown' | 'Button'>
 
@@ -367,6 +369,32 @@ function tableCard(look: Look, table: Table, Svg: SvgElement, columns: number, k
   return cardWithCopy(look, Svg, card, key, tableMarkdown(table))
 }
 
+function mathCard(look: Look, tex: string, Svg: SvgElement, columns: number, key: string) {
+  const card = mathSvg(tex, look.skin.palette, cardWidth(columns), look.copy !== undefined)
+
+  return cardWithCopy(look, Svg, card, key, tex.trim())
+}
+
+// A formula in cells: stacked fractions, radicals and tall brackets, one Text per row.
+function mathRows(look: Look, tex: string, maxWidth: number, key: string) {
+  const { Box, Text } = look.ui
+  const { palette } = look.skin
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Text color={palette.muted} bold>
+        MATH
+      </Text>
+      <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+        {mathArt(parseTex(tex), Math.max(10, maxWidth - 2)).map(row => (
+          <Text color={palette.fg}>{row === '' ? ' ' : row}</Text>
+        ))}
+      </Box>
+      {copyRow(look, key, tex.trim())}
+    </Box>
+  )
+}
+
 // A table as markdown again, for the clipboard.
 const tableMarkdown = (table: Table): string =>
   [table.header, table.header.map(() => '---'), ...table.rows].map(cells => `| ${cells.join(' | ')} |`).join('\n')
@@ -402,11 +430,17 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
     <Box flexDirection="column">
       {segments.map((segment, i) => {
         if (segment.kind === 'text') {
+          const text = look.prefs.math ? inlineMath(segment.text) : segment.text
+
           return look.prefs.markdown ? (
-            <Box flexDirection="column">{blockRows(look, splitBlocks(segment.text, { prose: look.surface === 'terminal' }))}</Box>
+            <Box flexDirection="column">{blockRows(look, splitBlocks(text, { prose: look.surface === 'terminal' }))}</Box>
           ) : (
-            <Markdown text={segment.text} />
+            <Markdown text={text} />
           )
+        }
+
+        if (segment.kind === 'math') {
+          return Svg === undefined ? mathRows(look, segment.tex, maxWidth, `copy-${i}`) : mathCard(look, segment.tex, Svg, maxWidth, `copy-${i}`)
         }
 
         // A shell fence on the desktop stays the app's own block, which has Run and Copy.

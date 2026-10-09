@@ -8,7 +8,10 @@ export type Table = { kind: 'table'; header: string[]; align: Align[]; rows: str
 // `raw` is the fence as written, for the surfaces that keep Claude Code's own drawing.
 export type Code = { kind: 'code'; lang: string; code: string; raw: string }
 
-export type Segment = { kind: 'text'; text: string } | Table | Code
+// `tex` is the formula alone; `raw` the block as written, kept for the copy button.
+export type Math = { kind: 'math'; tex: string; raw: string }
+
+export type Segment = { kind: 'text'; text: string } | Table | Code | Math
 
 // Fences the desktop marks runnable with a Run button of its own. A card is an image and
 // cannot carry it, so these keep Claude Code's drawing there.
@@ -43,8 +46,9 @@ const fit = (cells: string[], width: number): string[] =>
   Array.from({ length: width }, (_, i) => cells[i] ?? '')
 
 // `tables` off leaves tables as text; a fence `fence` turns down stays text too, so a
-// reply can be split for its charts alone.
-export type SplitOptions = { tables: boolean; fence: (lang: string, code: string) => boolean }
+// reply can be split for its charts alone. `math` takes display formulas out as their own
+// segments: ````math`` fences, `$$…$$` and `\[…\]`.
+export type SplitOptions = { tables: boolean; fence: (lang: string, code: string) => boolean; math?: boolean }
 
 const SPLIT_ALL: SplitOptions = { tables: true, fence: () => true }
 
@@ -67,6 +71,17 @@ export function splitReply(markdown: string, options: SplitOptions = SPLIT_ALL):
     const next = lines[i + 1] ?? ''
 
     const fence = FENCE.exec(line)
+
+    if (options.math === true && !inFence) {
+      const formula = displayMath(lines, i, fence)
+
+      if (formula !== null) {
+        flush()
+        segments.push({ kind: 'math', tex: formula.tex, raw: lines.slice(i, formula.end + 1).join('\n') })
+        i = formula.end
+        continue
+      }
+    }
 
     // A closed fence becomes a code segment; one still streaming stays text.
     if (fence !== null && !inFence) {
@@ -124,6 +139,63 @@ export function splitReply(markdown: string, options: SplitOptions = SPLIT_ALL):
   flush()
 
   return segments
+}
+
+const DISPLAY_OPEN = /^\s*(\$\$|\\\[)(.*)$/
+
+// A display formula starting on line `i`: where it ends and the TeX inside. One still
+// streaming (no closing delimiter yet) is not one, so it stays text until it closes.
+function displayMath(lines: readonly string[], i: number, fence: RegExpExecArray | null): { tex: string; end: number } | null {
+  const line = lines[i] ?? ''
+
+  if (fence !== null) {
+    if ((fence[2] ?? '').toLowerCase() !== 'math') {
+      return null
+    }
+
+    const close = lines.findIndex((other, j) => j > i && FENCE.test(other) && other.trim().replace(/[`~]/g, '') === '')
+
+    return close === -1 ? null : { tex: lines.slice(i + 1, close).join('\n'), end: close }
+  }
+
+  const open = DISPLAY_OPEN.exec(line)
+
+  if (open === null) {
+    return null
+  }
+
+  const closer = open[1] === '$$' ? '$$' : '\\]'
+  const rest = open[2] ?? ''
+  const sameLine = rest.indexOf(closer)
+
+  // Whole on one line, ` x `, with nothing but space after it.
+  if (sameLine !== -1) {
+    const tex = rest.slice(0, sameLine)
+
+    return rest.slice(sameLine + closer.length).trim() === '' && tex.trim() !== '' ? { tex, end: i } : null
+  }
+
+  for (let j = i + 1; j < lines.length; j++) {
+    const other = lines[j] ?? ''
+    const at = other.indexOf(closer)
+
+    if (at !== -1) {
+      if (other.slice(at + closer.length).trim() !== '') {
+        return null
+      }
+
+      const tex = [rest, ...lines.slice(i + 1, j), other.slice(0, at)].join('\n')
+
+      return tex.trim() === '' ? null : { tex, end: j }
+    }
+
+    // A blank line ends a paragraph, and a formula with it.
+    if (other.trim() === '') {
+      return null
+    }
+  }
+
+  return null
 }
 
 // Terminal cells a character takes: wide East Asian characters and emoji take two,

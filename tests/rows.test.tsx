@@ -979,3 +979,54 @@ test('a session start says when a newer release is out, at most once a day', asy
   expect(fetches).toBe(1)
   expect(toasts.some(text => text.includes('0.1.4'))).toBe(false)
 })
+
+test('a display formula is stacked art in the terminal and a vector card on the desktop', async ($, on) => {
+  stubEngine(on)
+
+  const text = 'The mean:\n\n$$\n\\bar{x} = \\frac{1}{n} \\sum_{i=1}^{n} x_i\n$$\n\nwhere $x_i$ is a sample.'
+  const reply = (surface: (typeof SURFACES)[number]) =>
+    ({ ...SITE, surface, component: 'AssistantMessage', requestId: `math-${surface}`, props: { text, isFirstOfReply: true } }) as const
+
+  const terminal = await $.ui.mount(reply('terminal'))
+  expect(await terminal.find({ type: 'Text', text: 'MATH' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '∑' })).toBeDefined()
+  expect((await terminal.find({ type: 'Text', text: 'where xᵢ is a sample.' })) ?? (await terminal.find({ type: 'Markdown', text: 'where xᵢ is a sample.' }))).toBeDefined()
+  await terminal.unmount()
+
+  const desktop = await $.ui.mount(reply('desktop'))
+  const svg = (await desktop.find({ type: 'Svg' })) as { props: { source: string; alt: string } } | undefined
+  expect(svg?.props.source).toContain('MATH')
+  expect(svg?.props.alt.startsWith('math:\n')).toBe(true)
+  await desktop.unmount()
+
+  await runSkin($, 'math off')
+  const off = await $.ui.mount(reply('terminal'))
+  // Off, the formula stays as written for the markdown pack to draw.
+  expect(await off.find({ type: 'Text', text: 'MATH' })).toBeUndefined()
+  expect(await off.find({ type: 'Text', text: 'where $x_i$ is a sample.' })).toBeDefined()
+})
+
+test('slash-command output with key: value lines is a table, prose keeps its row', async ($, on) => {
+  stubEngine(on)
+
+  const output = (text: string, surface: (typeof SURFACES)[number] = 'terminal') =>
+    ({ ...SITE, surface, component: 'CommandOutput', requestId: `cmd-${surface}-${text.length}`, props: { command: 'cost', args: '', text, isErrored: false } }) as const
+  const cost = 'Total cost:            $0.42\nTotal duration (API):  1m 3s\nTotal code changes:    12 lines'
+
+  const terminal = await $.ui.mount(output(cost))
+  expect(await terminal.find({ type: 'Text', text: 'Total duration (API)' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '$0.42' })).toBeDefined()
+  await terminal.unmount()
+
+  const desktop = await $.ui.mount(output(cost, 'desktop'))
+  expect(await desktop.find({ type: 'Svg' })).toBeDefined()
+  await desktop.unmount()
+
+  const prose = await $.ui.mount(output('Compacted the conversation.'))
+  expect(await prose.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  await prose.unmount()
+
+  await runSkin($, 'commands off')
+  const off = await $.ui.mount(output(cost))
+  expect(await off.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
