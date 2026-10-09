@@ -8,6 +8,7 @@ export const DEFAULT_PREFS: Prefs = {
   shimmer: true,
   band: true,
   clipOutput: false,
+  markdown: true,
 }
 
 // The on/off settings, by the word /skin and the settings pane use for each.
@@ -17,6 +18,7 @@ export const TOGGLES = {
   shimmer: 'shimmer',
   band: 'band',
   clip: 'clipOutput',
+  markdown: 'markdown',
 } as const satisfies Record<string, keyof Prefs>
 
 export type ToggleWord = keyof typeof TOGGLES
@@ -47,6 +49,7 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
     shimmer: flagOr(saved.shimmer, DEFAULT_PREFS.shimmer),
     band: flagOr(saved.band, DEFAULT_PREFS.band),
     clipOutput: flagOr(saved.clipOutput, DEFAULT_PREFS.clipOutput),
+    markdown: flagOr(saved.markdown, DEFAULT_PREFS.markdown),
   }
 }
 
@@ -67,6 +70,7 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
       `shimmer ${onOff(current.shimmer)}`,
       `band ${onOff(current.band)}`,
       `clip ${onOff(current.clipOutput)}`,
+      `markdown ${onOff(current.markdown)}`,
     ].join(' · '),
   ].join('\n')
 

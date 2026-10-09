@@ -9,7 +9,9 @@ import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
 import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
 import { clipLines, diffstat, pick } from './format'
+import { drawsBlocks, hasBlocks } from './blocks'
 import { splitReply } from './markdown'
+import type { Segment } from './markdown'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
@@ -221,7 +223,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | icons]',
+      argumentHint: '[gallery | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -503,20 +505,30 @@ reply width: ${lastColumns} columns`
     return promptRow(look, e.props.text, hasImages ? await next({ ...e, props: { ...e.props, text: '' } }) : undefined)
   })
 
-  // A reply keeps Claude Code's own drawing unless it holds a table to draw.
+  // A reply keeps Claude Code's own drawing unless it holds a card or markdown the pack draws.
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const active = await activeSkin($)
 
     const text = e.props.text
 
-    if (active === null || !active.prefs.tables || !/\||```|~~~/.test(text)) {
+    if (active === null) {
       return next(e)
     }
 
-    const segments = splitReply(text)
-    const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
+    const { prefs } = active
+    const cards = prefs.tables && /\||```|~~~/.test(text)
+    // The terminal draws every paragraph itself; elsewhere only alerts and task lists.
+    const blocks = prefs.markdown && (e.surface === 'terminal' || hasBlocks(text))
 
-    if (!fits || !segments.some(segment => segment.kind !== 'text')) {
+    if (!cards && !blocks) {
+      return next(e)
+    }
+
+    const segments: Segment[] = cards ? splitReply(text) : [{ kind: 'text', text }]
+    const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
+    const drawn = segments.some(segment => segment.kind !== 'text' || (prefs.markdown && drawsBlocks(segment.text, e.surface)))
+
+    if (!fits || !drawn) {
       return next(e)
     }
 

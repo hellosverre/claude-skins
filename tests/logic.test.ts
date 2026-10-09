@@ -14,6 +14,7 @@ import { deepen, isLightTheme, resolveLight, toLight } from '../hooks/light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
 import { SKINS } from '../hooks/themes'
+import { inlineRuns, splitBlocks } from '../hooks/blocks'
 import tokyoNight from '../hooks/themes/tokyo-night'
 
 const NAMES = ['tokyo-night', 'dracula', 'nord']
@@ -327,4 +328,53 @@ test('every built-in skin names itself once and fills every slot with a colour, 
     expect(skin.spinner.length).toBeGreaterThan(0)
     expect(skin.done.length).toBeGreaterThan(0)
   }
+})
+
+test('the markdown pack lifts alerts, task lists and headings out of a reply and leaves links to markdown', async () => {
+  const blocks = splitBlocks(
+    [
+      '## Plan',
+      '',
+      'Ran 54 tests in 3.2s on v1.4.0, see hooks/blocks.ts.',
+      '',
+      '> [!WARNING]',
+      '> This deletes the cache.',
+      '',
+      '- [x] parse',
+      '  - [ ] draw',
+      '',
+      'More in [the docs](https://example.com).',
+      '',
+      '```ts',
+      '# not a heading',
+      '```',
+    ].join('\n'),
+    { prose: true },
+  )
+
+  expect(blocks.map(block => block.kind)).toEqual(['heading', 'paragraph', 'alert', 'tasks', 'markdown'])
+  expect(blocks[0]).toEqual({ kind: 'heading', level: 2, text: 'Plan' })
+  expect(blocks[2]).toEqual({ kind: 'alert', type: 'warning', body: 'This deletes the cache.' })
+  expect(blocks[3]).toEqual({ kind: 'tasks', items: [{ done: true, depth: 0, text: 'parse' }, { done: false, depth: 1, text: 'draw' }] })
+  // The link and the fence after it stay one stretch of Claude Code's markdown.
+  expect(blocks[4]).toEqual({ kind: 'markdown', text: 'More in [the docs](https://example.com).\n\n```ts\n# not a heading\n```' })
+
+  const prose = splitBlocks('## Plan\n\nRan 54 tests.\n\n- [ ] ship', { prose: false })
+  expect(prose.map(block => block.kind)).toEqual(['markdown', 'tasks'])
+})
+
+test('inline runs pick out code, emphasis, numbers, versions, paths and durations', async () => {
+  const styled = (text: string) => inlineRuns(text).filter(run => run.style !== 'plain').map(run => `${run.style}:${run.text}`)
+
+  expect(styled('Ran **54 tests** in 3.2s, `pnpm test` on v1.4.0.')).toEqual(['bold:54 tests', 'duration:3.2s', 'code:pnpm test', 'version:v1.4.0'])
+  expect(styled('Edited hooks/rows.tsx and ./scripts/run.sh, 12% of 340 lines, took 140ms.')).toEqual([
+    'path:hooks/rows.tsx',
+    'path:./scripts/run.sh',
+    'number:12%',
+    'number:340',
+    'duration:140ms',
+  ])
+  // Words with digits and snake_case stay plain.
+  expect(styled('utf8 e2e my_var_name and/or')).toEqual([])
+  expect(styled('*quiet* and ~~gone~~')).toEqual(['italic:quiet', 'strike:gone'])
 })

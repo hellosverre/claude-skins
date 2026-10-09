@@ -177,13 +177,40 @@ test('a reply with a table draws the table, a reply without one keeps its own dr
     ({ ...SITE, surface: 'terminal', component: 'AssistantMessage', requestId: 'r1', props: { text, isFirstOfReply: true } }) as const
 
   const withTable = await $.ui.mount(reply('Limits:\n\n| Route | Limit |\n|---|--:|\n| /chat | 60 |\n| /up | 10 |'))
-  expect(await withTable.find({ type: 'Markdown' })).toBeDefined()
+  expect(await withTable.find({ type: 'Text', text: 'Limits:' })).toBeDefined()
   expect(await withTable.find({ type: 'Text', text: 'Route' })).toBeDefined()
   expect(await withTable.find({ type: 'Text', text: '10' })).toBeDefined()
   await withTable.unmount()
 
   const plain = await $.ui.mount(reply('No table | here, just a pipe.'))
   expect(await plain.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
+test('the markdown pack draws alerts and task lists everywhere, headings and paragraphs on the terminal', async ($, on) => {
+  stubEngine(on)
+
+  const text = '## Plan\n\nRan 54 tests in 3.2s.\n\n> [!WARNING]\n> This deletes the cache.\n\n- [x] parse\n- [ ] draw'
+  const reply = (surface: (typeof SURFACES)[number]) =>
+    ({ ...SITE, surface, component: 'AssistantMessage', requestId: `md-${surface}`, props: { text, isFirstOfReply: true } }) as const
+
+  const terminal = await $.ui.mount(reply('terminal'))
+  expect(await terminal.find({ type: 'Text', text: '▍ Plan' })).toBeDefined()
+  expect(spanColor((await terminal.find({ type: 'Text', text: /Ran 54 tests/ })) as Found, '3.2s')).toBe('#f5f5f5')
+  expect(await terminal.find({ type: 'Text', text: '▲ Warning' })).toBeDefined()
+  expect(JSON.stringify(await terminal.find({ type: 'Box' }))).toContain('"borderStyle":"round"')
+  expect(await terminal.find({ type: 'Text', text: '☑ ' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: '1/2 done' })).toBeDefined()
+  await terminal.unmount()
+
+  const desktop = await $.ui.mount(reply('desktop'))
+  expect(await desktop.find({ type: 'Text', text: '▲ Warning' })).toBeDefined()
+  // The desktop's own markdown sets headings and paragraphs.
+  expect(((await desktop.find({ type: 'Markdown' })) as Found)?.props.text).toBe('## Plan\n\nRan 54 tests in 3.2s.')
+  await desktop.unmount()
+
+  await runSkin($, 'markdown off')
+  const off = await $.ui.mount(reply('terminal'))
+  expect(await off.find({ type: 'Text', text: 'stock row' })).toBeDefined()
 })
 
 test('a terminal table sizes Korean, Chinese, Japanese and emoji cells to their full width', async ($, on) => {

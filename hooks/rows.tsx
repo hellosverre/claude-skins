@@ -4,6 +4,8 @@ import type { Prefs, TurnStats } from '../types'
 import { formatDuration, formatMs } from './format'
 import { columnWidths, cutCell } from './markdown'
 import type { Segment, Table } from './markdown'
+import { splitBlocks } from './blocks'
+import { blockRows } from './prose'
 import type { Icons, Kind, Skin } from './skin'
 import { spinnerIcon, toolIcon } from './icons'
 import type { SpinnerMode } from './icons'
@@ -376,7 +378,11 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
     <Box flexDirection="column">
       {segments.map((segment, i) => {
         if (segment.kind === 'text') {
-          return <Markdown text={segment.text} />
+          return look.prefs.markdown ? (
+            <Box flexDirection="column">{blockRows(look, splitBlocks(segment.text, { prose: look.surface === 'terminal' }))}</Box>
+          ) : (
+            <Markdown text={segment.text} />
+          )
         }
 
         if (segment.kind === 'code') {
