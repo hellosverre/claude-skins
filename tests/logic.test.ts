@@ -736,6 +736,26 @@ test('a packet field too narrow for its name is named in full under the art', as
   expect(text).toContain('9 ACK')
 })
 
+test('a block link with no straight run turns one corner instead of being listed', async () => {
+  const block = parseMermaid('block-beta\n  columns 3\n  a["Web"] b["API"] c["Worker"]\n  space:3\n  d[("Postgres")] space:2\n  c --> d') as Block
+  const text = chartArt(block, 100, false)?.rows.map(row => row.map(segment => segment.text).join('')).join('\n') ?? ''
+
+  expect(text).toContain('←')
+  expect(text).toContain('┘')
+  expect(text).not.toContain('Worker ──→ Postgres')
+})
+
+test('a connector crosses a frame on its line, clear of its name, and lands inside it', async () => {
+  const c4 = parseMermaid('C4Container\n  Person(buyer, "Buyer")\n  System_Boundary(shop, "Shop") {\n    Container(web, "Web Shop")\n  }\n  Rel(buyer, web, "Browses")') as C4
+  const rows = chartArt(c4, 100, false)?.rows.map(row => row.map(segment => segment.text).join('')) ?? []
+  const edge = rows.findIndex(row => row.includes('Shop · system'))
+
+  expect(rows[edge]).toContain('┄ Shop · system ┄')
+  expect(rows[edge]).not.toContain('system │')
+  expect(rows[edge]).toContain('│')
+  expect(rows[edge + 1]).toContain('↓')
+})
+
 test('a block diagram reads columns, spans, shapes, nested blocks and labelled links', async () => {
   const block = parseMermaid([
     'block-beta',

@@ -69,24 +69,114 @@ function connect(grid: Grid, a: Cells, b: Cells, heads: Heads, line: Link['line'
   const right = Math.min(a.x + a.w, b.x + b.w) - 1
 
   if (top <= bottom && (a.x + a.w <= b.x || b.x + b.w <= a.x)) {
-    const y = Math.floor((top + bottom) / 2)
     const aFirst = a.x + a.w <= b.x
     const [from, to] = aFirst ? [a.x + a.w, b.x] : [b.x + b.w, a.x]
     const [back, ahead] = ascii ? ['<', '>'] : ['←', '→']
 
-    return run(grid, Array.from({ length: to - from }, (_, i) => ({ x: from + i, y })), ascii ? flatAscii : flat, aFirst ? back : ahead, aFirst ? ahead : back, aFirst, heads, isOpen)
+    // Inside the boxes' borders, middle row first.
+    return outward(top, bottom).some(y => run(grid, Array.from({ length: to - from }, (_, i) => ({ x: from + i, y })), ascii ? flatAscii : flat, aFirst ? back : ahead, aFirst ? ahead : back, aFirst, heads, isOpen))
   }
 
   if (left <= right && (a.y + a.h <= b.y || b.y + b.h <= a.y)) {
-    const x = Math.floor((left + right) / 2)
     const aFirst = a.y + a.h <= b.y
     const [from, to] = aFirst ? [a.y + a.h, b.y] : [b.y + b.h, a.y]
     const [up, down] = ascii ? ['^', 'v'] : ['↑', '↓']
 
-    return run(grid, Array.from({ length: to - from }, (_, i) => ({ x, y: from + i })), ascii ? tallAscii : tall, aFirst ? up : down, aFirst ? down : up, aFirst, heads, isOpen)
+    return outward(left, right).some(x => run(grid, Array.from({ length: to - from }, (_, i) => ({ x, y: from + i })), ascii ? tallAscii : tall, aFirst ? up : down, aFirst ? down : up, aFirst, heads, isOpen))
+  }
+
+  return elbow(grid, a, b, heads, line, ascii, isOpen)
+}
+
+// From `lo` to `hi` middle first, then alternately either side of it; a range wider than a
+// border keeps its two border cells out, so a connector meets a box's side, not its corner.
+function outward(lo: number, hi: number): number[] {
+  const [from, to] = hi - lo >= 2 ? [lo + 1, hi - 1] : [lo, hi]
+  const middle = Math.floor((from + to) / 2)
+
+  return Array.from({ length: (to - from + 1) * 2 }, (_, i) => middle + (i % 2 === 0 ? i / 2 : -(i + 1) / 2)).filter(at => at >= from && at <= to)
+}
+
+type Dir = 'up' | 'down' | 'left' | 'right'
+
+const STEP: Readonly<Record<Dir, Spot>> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } }
+const HEAD: Readonly<Record<Dir, readonly [string, string]>> = { up: ['↑', '^'], down: ['↓', 'v'], left: ['←', '<'], right: ['→', '>'] }
+const BACK: Readonly<Record<Dir, Dir>> = { up: 'down', down: 'up', left: 'right', right: 'left' }
+
+// The corner joining the leg it came in on to the leg it leaves on, keyed by the two
+// sides of the cell the line touches.
+const CORNERS: Readonly<Record<string, readonly [string, string]>> = {
+  'down,right': ['┌', '┏'],
+  'down,left': ['┐', '┓'],
+  'right,up': ['└', '┗'],
+  'left,up': ['┘', '┛'],
+}
+
+// One turn from the middle of a side of `a` to the middle of a side of `b`, for boxes that
+// share neither rows nor columns: down or up then across, or across then down or up. The
+// corner and both heads must fall on empty cells, never on a frame's edge.
+function elbow(grid: Grid, a: Cells, b: Cells, heads: Heads, line: Link['line'], ascii: boolean, isOpen: Open): boolean {
+  const mid = (box: Cells): Spot => ({ x: box.x + Math.floor(box.w / 2), y: box.y + Math.floor(box.h / 2) })
+  const [am, bm] = [mid(a), mid(b)]
+  const below = bm.y > am.y
+  const rightward = bm.x > am.x
+  const tries: [Spot, Dir, Spot, Dir, Spot][] = [
+    // Out of a's top or bottom, along b's middle row, into b's side.
+    [{ x: am.x, y: below ? a.y + a.h : a.y - 1 }, below ? 'down' : 'up', { x: am.x, y: bm.y }, rightward ? 'right' : 'left', { x: rightward ? b.x - 1 : b.x + b.w, y: bm.y }],
+    // Out of a's side, along b's middle column, into b's top or bottom.
+    [{ x: rightward ? a.x + a.w : a.x - 1, y: am.y }, rightward ? 'right' : 'left', { x: bm.x, y: am.y }, below ? 'down' : 'up', { x: bm.x, y: below ? b.y - 1 : b.y + b.h }],
+  ]
+  const [flat, tall, flatAscii, tallAscii] = LINES[line]
+  const bodyOf = (dir: Dir): string => (dir === 'up' || dir === 'down' ? (ascii ? tallAscii : tall) : ascii ? flatAscii : flat)
+
+  for (const [start, first, turn, second, end] of tries) {
+    const legOne = walk(start, turn, first)
+    const legTwo = walk({ x: turn.x + STEP[second].x, y: turn.y + STEP[second].y }, end, second)
+
+    if (legOne === null || legTwo === null || legTwo.length < 1 || (heads.start && legOne.length < 2)) {
+      continue
+    }
+
+    const cells = [...legOne, ...legTwo]
+    const corner = legOne.length - 1
+    const ends = [cells[0], turn, cells[cells.length - 1]].filter((cell): cell is Spot => cell !== undefined)
+
+    // A frame's edge may be crossed, one cell at a time, but not followed.
+    const crosses = cells.every((cell, i) => isBlank(grid, cell.x, cell.y) || (isOpen(cell.x, cell.y) && [cells[i - 1], cells[i + 1]].every(next => next === undefined || isBlank(grid, next.x, next.y))))
+
+    if (!crosses || !ends.every(cell => isBlank(grid, cell.x, cell.y))) {
+      continue
+    }
+
+    const [plain, heavy] = CORNERS[[BACK[first], second].sort().join(',')] ?? ['+', '+']
+    const bend = ascii ? '+' : line === 'thick' ? heavy : plain
+
+    cells.forEach((cell, i) => {
+      const glyph =
+        i === cells.length - 1 && heads.end ? HEAD[second][ascii ? 1 : 0]
+        : i === 0 && heads.start ? HEAD[BACK[first]][ascii ? 1 : 0]
+        : i === corner ? bend
+        : bodyOf(i < corner ? first : second)
+
+      write(grid, cell.x, cell.y, glyph, 'muted')
+    })
+
+    return true
   }
 
   return false
+}
+
+// The cells from `from` to `to` inclusive, stepping `dir`; null when `to` is not ahead.
+function walk(from: Spot, to: Spot, dir: Dir): Spot[] | null {
+  const step = STEP[dir]
+  const length = step.x === 0 ? (to.y - from.y) * step.y + 1 : (to.x - from.x) * step.x + 1
+
+  if (length < 1 || (step.x === 0 ? from.x !== to.x : from.y !== to.y)) {
+    return null
+  }
+
+  return Array.from({ length }, (_, i) => ({ x: from.x + step.x * i, y: from.y + step.y * i }))
 }
 
 // `cells` run from the box listed first in space; each end carries its head when asked.
@@ -171,10 +261,14 @@ function drawFrame(grid: Grid, placed: Placed, isDashed: boolean, ascii: boolean
   }
 }
 
+const FRAME_ACROSS: ReadonlySet<string> = new Set(['─', '┄', '-', '.'])
+const FRAME_LINE: ReadonlySet<string> = new Set([...FRAME_ACROSS, '│', '┆', '|', ':'])
+const FRAME_CORNER: ReadonlySet<string> = new Set(['┌', '┐', '└', '┘', '+'])
+
 // The cells on a frame's outline, as `x,y` keys.
 function edgeCells(at: Cells): string[] {
-  const across = Array.from({ length: at.w }, (_, i) => [`,`, `,`])
-  const down = Array.from({ length: at.h }, (_, i) => [`,`, `,`])
+  const across = Array.from({ length: at.w }, (_, i) => [`${at.x + i},${at.y}`, `${at.x + i},${at.y + at.h - 1}`])
+  const down = Array.from({ length: at.h }, (_, i) => [`${at.x},${at.y + i}`, `${at.x + at.w - 1},${at.y + i}`])
 
   return [...across, ...down].flat()
 }
@@ -186,9 +280,10 @@ function systemArt(chart: Block | C4, room: number, ascii: boolean, sizes: { mos
   const metrics: Metrics = {
     gap: 4,
     rowGap: chart.links.length > 0 ? 2 : 1,
+    // A blank row and column inside every frame, so a head crossing its edge lands clear.
     side: 2,
-    head: 1,
-    foot: 1,
+    head: 2,
+    foot: 2,
     least: sizes.least,
     most: sizes.most,
     boxHeight: (box, w) => heightOf(linesOf(box, Math.round(w))),
@@ -205,7 +300,18 @@ function systemArt(chart: Block | C4, room: number, ascii: boolean, sizes: { mos
 
   const frames = layout.placed.filter(placed => placed.part.type === 'frame')
   const edges = new Set(frames.flatMap(placed => edgeCells(cellsOf(placed))))
-  const isOpen: Open = (x, y) => isBlank(grid, x, y) || edges.has(`,`)
+  // On a frame's outline only its line is open, with outline either side along it: never a
+  // corner, its name, or the cell beside the name.
+  const charAt = (x: number, y: number): string => grid[y]?.[x]?.char ?? ''
+  const isOpen: Open = (x, y) => {
+    if (!edges.has(`${x},${y}`)) {
+      return isBlank(grid, x, y)
+    }
+
+    const along = FRAME_ACROSS.has(charAt(x, y)) ? [charAt(x - 1, y), charAt(x + 1, y)] : [charAt(x, y - 1), charAt(x, y + 1)]
+
+    return FRAME_LINE.has(charAt(x, y)) && along.every(char => FRAME_LINE.has(char) || FRAME_CORNER.has(char))
+  }
 
   frames.forEach(placed => drawFrame(grid, placed, chart.kind === 'c4', ascii))
   boxesOf(layout.placed).forEach(placed => drawBox(grid, placed, toneOf(placed.part), chart.kind === 'c4', ascii))
@@ -256,22 +362,9 @@ export function architectureArt(chart: Architecture, room: number, ascii: boolea
   const rowGap = 2
   const grid = gridOf(chart.columns * cell + gap * (chart.columns - 1), chart.rows * rowH + rowGap * (chart.rows - 1))
   const groupOf = new Map(chart.groups.map(group => [group.id, group]))
-  const roots = chart.groups.filter(group => group.parent === null)
 
-  const rootOf = (id: string | null): ArchGroup | undefined => {
-    let group = id === null ? undefined : groupOf.get(id)
-
-    while (group?.parent != null) {
-      group = groupOf.get(group.parent)
-    }
-
-    return group
-  }
-  const toneOf = (id: string | null): Tone => {
-    const root = rootOf(id)
-
-    return series(root === undefined ? 0 : roots.indexOf(root) + 1)
-  }
+  // Each group its own colour, so a nested group stands apart from the one around it.
+  const toneOf = (id: string | null): Tone => series(id === null ? 0 : chart.groups.findIndex(group => group.id === id) + 1)
 
   // Each box as wide as its name needs, centred in its cell; a junction is one dot.
   const at = new Map(
