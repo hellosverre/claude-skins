@@ -356,6 +356,31 @@ test('the desktop draws a table as an animated vector card, with a tooltip on a 
   expect(svg?.props.alt).toContain('Skin | Accent | Note')
 })
 
+test('a card animates on its first draw only, so a streaming reply does not flicker', async ($, on) => {
+  stubEngine(on)
+
+  const reply = (requestId: string, text: string) =>
+    ({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId, props: { text, isFirstOfReply: true } }) as const
+  const sourceOf = async (requestId: string, text: string) => {
+    const ui = await $.ui.mount(reply(requestId, text))
+    const source = ((await ui.find({ type: 'Svg' })) as { props: { source: string } } | undefined)?.props.source ?? ''
+
+    await ui.unmount()
+
+    return source
+  }
+  const table = '| a | b |\n|---|---|\n| 1 | 2 |'
+
+  const first = await sourceOf('s1', table)
+  const streamed = await sourceOf('s1', `${table}\n| 3 | 4 |`)
+  const other = await sourceOf('s2', table)
+
+  expect(first).not.toContain('animation:none!important')
+  expect(streamed).toContain('animation:none!important')
+  expect(streamed).toContain('>3<')
+  expect(other).not.toContain('animation:none!important')
+})
+
 test('on the desktop an edit is a diff card and a shell command a terminal card', async ($, on) => {
   stubEngine(on)
 

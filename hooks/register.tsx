@@ -14,6 +14,7 @@ import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBan
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
 import { settingsPane } from './settings'
+import { sightings } from './sightings'
 import { ICONS } from './skin'
 import type { Skin } from './skin'
 import { hunksOf } from './svg-diff'
@@ -122,6 +123,11 @@ const lookOf = (
   ...(copy === undefined ? {} : { copy }),
 })
 
+// A drawing's cards animate on their first draw only, keyed by the drawing's instance
+// (the message id, the tool_use_id) so two replies never share a card.
+const seenCards = sightings()
+const drawnOnce = (instance: string) => (key: string) => seenCards(`${instance}:${key}`)
+
 // Made skins from the store, each checked again: the store may hold an older shape.
 function parseCustom(raw: unknown): Record<string, CustomSkin> {
   const saved = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
@@ -195,7 +201,9 @@ async function refreshUsage($: EngineInterface): Promise<void> {
     limits: usage.rateLimits.map(limit => ({ label: limitLabel(limit.kind), percent: limit.percentUsed })),
   }
 
-  await update($, usageAtom, () => snap)
+  // The same numbers keep the same value, so the band is not redrawn and its rings do not
+  // fill again.
+  await update($, usageAtom, previous => (JSON.stringify(previous) === JSON.stringify(snap) ? previous : snap))
 }
 
 async function commit($: EngineInterface, state: DesignState): Promise<void> {
@@ -458,7 +466,7 @@ reply width: ${lastColumns} columns`
     const copy = (text: string) => {
       void $.ui.copy({ text, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
-    const look = active === null ? undefined : lookOf($.ui.resolve(e), active, e.surface, copy)
+    const look = active === null ? undefined : { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }
     const columns = e.viewport?.columns ?? 100
 
     // The desktop gets cards: a diff for an edit, a terminal for a shell command.
@@ -527,7 +535,7 @@ reply width: ${lastColumns} columns`
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    return replyRows(lookOf(ui, active, e.surface, copy), segments, e.viewport?.columns ?? 100, e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : undefined)
+    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }, segments, e.viewport?.columns ?? 100, e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : undefined)
   })
 
   // The terminal's spinner gets the skin's word with a shimmer; the desktop's keeps its
