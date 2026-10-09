@@ -1,6 +1,16 @@
 // The Mermaid people actually write in a reply, read well enough to draw: flowcharts,
-// xy charts and pies. Anything past that (subgraphs, styling, other diagram kinds) reads
-// as null, and the fence keeps its code-block drawing.
+// xy charts and pies here, the planning and shape kinds in their own files. Anything past
+// that (subgraphs, styling, other diagram kinds) reads as null, and the fence keeps its
+// code-block drawing.
+
+import { frontmatterOf, listOf, numbersOf, plural, statementsOf, unquote } from './mermaid-lex'
+import { parseGantt, parseJourney, parseKanban, parseTimeline } from './mermaid-plan'
+import type { Gantt, Journey, Kanban, Timeline } from './mermaid-plan'
+import { parseGitGraph, parseMindmap, parseQuadrant, parseRadar, parseSankey } from './mermaid-shape'
+import type { GitGraph, Mindmap, Quadrant, Radar, Sankey } from './mermaid-shape'
+
+export type * from './mermaid-plan'
+export type * from './mermaid-shape'
 
 export type Shape = 'box' | 'round' | 'diamond'
 
@@ -12,6 +22,7 @@ export type FlowEdge = { from: string; to: string; label: string; line: 'solid' 
 // `back` marks the edges that point up the ranks, as in a retry loop.
 export type Flow = {
   kind: 'flow'
+  title: string
   direction: 'down' | 'right'
   nodes: FlowNode[]
   edges: FlowEdge[]
@@ -27,33 +38,36 @@ export type Slice = { label: string; value: number }
 
 export type Pie = { kind: 'pie'; title: string; slices: Slice[] }
 
-export type Chart = Flow | XyChart | Pie
+export type Chart = Flow | XyChart | Pie | Gantt | Timeline | Journey | Kanban | Mindmap | Quadrant | Radar | Sankey | GitGraph
 
 // Past these a picture stops being easier to read than the source.
 export const MAX_NODES = 40
 const MAX_POINTS = 60
 const MAX_SLICES = 16
 
-// Lines that carry no meaning for the drawing, kept out of the statement list.
-const IGNORED = /^(%%|classDef\s|class\s|style\s|linkStyle\s|click\s|accTitle|accDescr)/
+export function parseMermaid(source: string): Chart | null {
+  const { title, lines } = frontmatterOf(source)
+  const chart = parseKind(lines)
 
-const unquote = (text: string): string =>
-  text
-    .trim()
-    .replace(/^"(.*)"$/s, '$1')
-    .replace(/<br\s*\/?>/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-function statementsOf(body: readonly string[]): string[] {
-  return body
-    .flatMap(line => line.split(';'))
-    .map(line => line.trim())
-    .filter(line => line !== '' && !IGNORED.test(line))
+  // A frontmatter title names any chart that did not name itself.
+  return chart === null || chart.title !== '' || title === '' ? chart : { ...chart, title }
 }
 
-export function parseMermaid(source: string): Chart | null {
-  const lines = source.replace(/\r/g, '').split('\n')
+// The header word and the parser that reads the lines after it.
+const KINDS: readonly (readonly [RegExp, (body: readonly string[]) => Chart | null])[] = [
+  [/^xychart(-beta)?\b/, parseXy],
+  [/^gantt\b/, parseGantt],
+  [/^timeline\b/, parseTimeline],
+  [/^journey\b/, parseJourney],
+  [/^kanban\b/, parseKanban],
+  [/^mindmap\b/, parseMindmap],
+  [/^quadrantChart\b/, parseQuadrant],
+  [/^radar(-beta)?\b/, parseRadar],
+  [/^sankey(-beta)?\b/, parseSankey],
+  [/^gitGraph\b/, parseGitGraph],
+]
+
+function parseKind(lines: readonly string[]): Chart | null {
   const start = lines.findIndex(line => line.trim() !== '' && !line.trim().startsWith('%%'))
   const head = (lines[start] ?? '').trim()
   const body = lines.slice(start + 1)
@@ -65,15 +79,13 @@ export function parseMermaid(source: string): Chart | null {
     return parseFlow(direction.trim(), [...inline, ...body])
   }
 
-  if (/^xychart(-beta)?\b/.test(head)) {
-    return parseXy(body)
-  }
-
   if (/^pie\b/.test(head)) {
     return parsePie(head, body)
   }
 
-  return null
+  const parse = KINDS.find(([pattern]) => pattern.test(head))?.[1]
+
+  return parse === undefined ? null : parse(body)
 }
 
 // A node reference with its optional label: `A`, `A[Box]`, `A(Round)`, `A{Choice}`, and
@@ -183,7 +195,7 @@ function parseFlow(head: string, body: readonly string[]): Flow | null {
     ranks[rank] = [...(ranks[rank] ?? []), id]
   }
 
-  return { kind: 'flow', direction, nodes: order.map(id => nodes.get(id) as FlowNode), edges, ranks: ranks.filter(rank => rank !== undefined), back }
+  return { kind: 'flow', title: '', direction, nodes: order.map(id => nodes.get(id) as FlowNode), edges, ranks: ranks.filter(rank => rank !== undefined), back }
 }
 
 // The edges that close a cycle, found walking from each node in source order.
@@ -215,23 +227,6 @@ function backEdges(order: readonly string[], edges: readonly FlowEdge[]): FlowEd
 
   return back
 }
-
-const NUMBER = /^-?\d+(?:\.\d+)?$/
-
-function numbersOf(list: string): number[] | null {
-  const values = list
-    .split(',')
-    .map(value => value.trim())
-    .filter(value => value !== '')
-
-  return values.every(value => NUMBER.test(value)) ? values.map(Number) : null
-}
-
-const listOf = (list: string): string[] =>
-  list
-    .split(',')
-    .map(unquote)
-    .filter(item => item !== '')
 
 // A nice round step for about `count` gridlines across `span`.
 export function niceStep(span: number, count = 4): number {
@@ -324,8 +319,6 @@ function parsePie(head: string, body: readonly string[]): Pie | null {
 
 // What a chart is called in a card header and how much it holds.
 export function chartHeading(chart: Chart): { kind: string; count: string } {
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-
   switch (chart.kind) {
     case 'flow':
       return { kind: 'Flowchart', count: plural(chart.nodes.length, 'step') }
@@ -333,6 +326,24 @@ export function chartHeading(chart: Chart): { kind: string; count: string } {
       return { kind: 'Chart', count: chart.series.length > 1 ? `${chart.series.length} series` : plural(chart.labels.length, 'point') }
     case 'pie':
       return { kind: 'Pie', count: plural(chart.slices.length, 'slice') }
+    case 'gantt':
+      return { kind: 'Gantt', count: plural(chart.tasks.length, 'task') }
+    case 'timeline':
+      return { kind: 'Timeline', count: plural(chart.periods.length, 'period') }
+    case 'journey':
+      return { kind: 'Journey', count: plural(chart.steps.length, 'step') }
+    case 'kanban':
+      return { kind: 'Kanban', count: plural(chart.columns.reduce((sum, column) => sum + column.cards.length, 0), 'card') }
+    case 'mindmap':
+      return { kind: 'Mindmap', count: plural(chart.count, 'node') }
+    case 'quadrant':
+      return { kind: 'Quadrant', count: plural(chart.points.length, 'point') }
+    case 'radar':
+      return { kind: 'Radar', count: plural(chart.curves.length, 'curve') }
+    case 'sankey':
+      return { kind: 'Sankey', count: plural(chart.links.length, 'flow') }
+    case 'git':
+      return { kind: 'Git graph', count: plural(chart.commits.length, 'commit') }
   }
 }
 
@@ -362,7 +373,8 @@ export const CHART_HINT = [
   '# Charts',
   'This transcript draws ```mermaid fences as pictures. Supported: `flowchart TD|LR` (nodes A[box], A(round), A{decision};',
   'edges -->, -.->, ==>, with labels -->|yes|), `xychart-beta` (title "…", x-axis [a, b], y-axis "unit" 0 --> 100,',
-  'bar [..], line [..]) and `pie` (title …, "label" : value). No subgraphs or styling; at most 40 nodes.',
+  'bar [..], line [..]), `pie` (title …, "label" : value), `gantt`, `timeline`, `journey`, `kanban`, `mindmap`,',
+  '`quadrantChart`, `radar-beta`, `sankey-beta` and `gitGraph`. No subgraphs or styling; at most 40 nodes.',
   'In the terminal `sequenceDiagram`, `stateDiagram-v2`, `classDiagram` and `erDiagram` draw too.',
-  'When a process, a comparison of numbers or a breakdown reads better as a picture than as prose or a table, draw one.',
+  'When a process, a schedule, a comparison of numbers or a breakdown reads better as a picture than as prose or a table, draw one.',
 ].join(' ')
