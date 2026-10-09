@@ -14,6 +14,14 @@ export type ShellStatus = { tone: 'ok' | 'err' | 'warn'; text: string }
 
 export const SHELLS = new Set(['Bash', 'PowerShell'])
 
+// A command sent to the background, or one whose output is an image, has nothing a card
+// can show: Claude Code's own row says where it went or draws the image.
+export function keepsOwnRow(output: unknown): boolean {
+  const record = typeof output === 'object' && output !== null ? (output as Record<string, unknown>) : {}
+
+  return typeof record.backgroundTaskId === 'string' || record.isImage === true
+}
+
 // `Exit code 2`, the line a failed call's error text opens with.
 const EXIT_LINE = /^\s*Exit code (-?\d+)[^\S\n]*\r?\n?/
 

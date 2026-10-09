@@ -7,7 +7,7 @@ marked as verified; everything else says so.
 
 | Surface | Windows | macOS | Linux |
 |---|---|---|---|
-| Terminal | **Verified at 0.3.0** by the author: 120 engine tests, manual use | Untested | **Verified at 0.4.0**: 131 engine tests, benchmark below, Claude Code 2.1.288 |
+| Terminal | **Verified at 0.3.0** by the author: 120 engine tests, manual use | Untested | **Verified at 0.4.0**: 129 engine tests, benchmark below, Claude Code 2.1.288 |
 | Desktop app (Code tab) | **Verified at 0.3.0** by the author: manual use | Untested | No desktop app on Linux; the desktop path runs in the engine tests and the benchmark only |
 | VS Code | Untested | Untested | Untested |
 | Mobile | Untested | Untested | Untested |

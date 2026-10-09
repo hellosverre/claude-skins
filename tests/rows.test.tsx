@@ -1117,6 +1117,11 @@ test('/skin shell off gives shell output back to Claude Code on both surfaces', 
   await runSkin($, 'shell on')
   const back = await $.ui.mount(shellResult(id, output))
   expect(await back.find({ type: 'Text', text: '$ pnpm build' })).toBeDefined()
+  await back.unmount()
+
+  // A command sent to the background has no output yet: Claude Code's row says where it went.
+  const background = await $.ui.mount(shellResult(id, { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b1' }))
+  expect(await background.find({ type: 'Text', text: 'stock row' })).toBeDefined()
 })
 
 test('/skin calm stills the spinner, drops the rail, folds read-only output and keeps failures whole', async ($, on) => {

@@ -19,7 +19,7 @@ import { commandSegments } from './command-output'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
-import { SHELLS, shellResultOf } from './shell'
+import { keepsOwnRow, SHELLS, shellResultOf } from './shell'
 import { shellRows } from './shell-rows'
 import { settingsPane } from './settings'
 import { sightings } from './sightings'
@@ -604,7 +604,9 @@ reply width: ${lastColumns} columns`
       }
     }
 
-    if (look?.svg !== undefined && look.prefs.shell && SHELLS.has(e.props.tool)) {
+    const isShellCard = look !== undefined && look.prefs.shell && SHELLS.has(e.props.tool) && !keepsOwnRow(e.props.output)
+
+    if (look?.svg !== undefined && isShellCard) {
       const shell = shellOutputOf(e.props.output)
 
       if (shell !== null) {
@@ -613,7 +615,7 @@ reply width: ${lastColumns} columns`
     }
 
     // The terminal's card is text: the command and its exit status, stderr apart, folded.
-    if (look !== undefined && e.surface === 'terminal' && look.prefs.shell && SHELLS.has(e.props.tool)) {
+    if (look !== undefined && e.surface === 'terminal' && isShellCard) {
       const shell = shellResultOf(e.props.output, e.props.isErrored)
 
       if (shell !== null) {
