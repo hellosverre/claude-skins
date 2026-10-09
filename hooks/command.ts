@@ -16,6 +16,9 @@ export const DEFAULT_PREFS: Prefs = {
   shell: true,
   highlight: true,
   hints: true,
+  links: true,
+  copy: true,
+  fold: true,
   calm: null,
 }
 
@@ -34,6 +37,9 @@ export const TOGGLES = {
   shell: 'shell',
   highlight: 'highlight',
   hints: 'hints',
+  links: 'links',
+  copy: 'copy',
+  fold: 'fold',
 } as const satisfies Record<string, keyof Prefs>
 
 export type ToggleWord = keyof typeof TOGGLES
@@ -96,6 +102,9 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
     shell: flagOr(saved.shell, DEFAULT_PREFS.shell),
     highlight: flagOr(saved.highlight, DEFAULT_PREFS.highlight),
     hints: flagOr(saved.hints, DEFAULT_PREFS.hints),
+    links: flagOr(saved.links, DEFAULT_PREFS.links),
+    copy: flagOr(saved.copy, DEFAULT_PREFS.copy),
+    fold: flagOr(saved.fold, DEFAULT_PREFS.fold),
     calm: calmOf(saved.calm),
   }
 }
@@ -138,6 +147,9 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
       `shell ${onOff(current.shell)}`,
       `highlight ${onOff(current.highlight)}`,
       `hints ${onOff(current.hints)}`,
+      `links ${onOff(current.links)}`,
+      `copy ${onOff(current.copy)}`,
+      `fold ${onOff(current.fold)}`,
       `calm ${onOff(current.calm !== null)}`,
     ].join(' · '),
   ].join('\n')

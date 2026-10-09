@@ -16,7 +16,7 @@ export type Block =
   | { kind: 'tasks'; items: Task[] }
   | { kind: 'paragraph'; lines: Line[] }
 
-export type RunStyle = 'plain' | 'bold' | 'italic' | 'strike' | 'code' | 'number' | 'version' | 'path' | 'duration'
+export type RunStyle = 'plain' | 'bold' | 'italic' | 'strike' | 'code' | 'number' | 'version' | 'path' | 'duration' | 'url'
 
 export type Run = { style: RunStyle; text: string }
 
@@ -33,9 +33,11 @@ const FENCE = /^\s*(```|~~~)/
 
 const INLINE = /(`+)([^`]+?)\1|\*\*(?=\S)(.+?)(?<=\S)\*\*|__(?=\S)(.+?)(?<=\S)__|~~(?=\S)(.+?)(?<=\S)~~|(?<![\w*])\*(?=\S)(.+?)(?<=\S)\*(?![\w*])|(?<![\w_])_(?=\S)(.+?)(?<=\S)_(?![\w_])/g
 
-// Ordered so a path wins over the version or number inside it.
+// Ordered so a URL wins over the path inside it, and a path over its version or number. A
+// path keeps a `:line` or `:line:col` after it.
 const HIGHLIGHT: readonly (readonly [RunStyle, RegExp])[] = [
-  ['path', /(?:[A-Za-z]:[\\/]|~\/|\.{1,2}\/|(?<![\w)])\/(?=[\w.@-]+\/))[\w.@-]+(?:[\\/][\w.@-]+)*\/?|(?<![\w/.-])[\w@-]+(?:\/[\w.@-]+)*\/[\w-]+\.[A-Za-z][A-Za-z0-9]{0,5}\b/],
+  ['url', /\bhttps?:\/\/[^\s<>()"'`]*[^\s<>()"'`.,;:!?]/],
+  ['path', /(?:(?:[A-Za-z]:[\\/]|~\/|\.{1,2}\/|(?<![\w)])\/(?=[\w.@-]+\/))[\w.@-]+(?:[\\/][\w.@-]+)*\/?|(?<![\w/.-])[\w@-]+(?:\/[\w.@-]+)*\/[\w-]+\.[A-Za-z][A-Za-z0-9]{0,5}\b)(?::\d+(?::\d+)?\b)?/],
   ['version', /(?<![\w.-])v\d+(?:\.\d+)*(?:-[\w.]+)?\b|(?<![\w.-])\d+\.\d+\.\d+(?:-[\w.]+)?\b/],
   ['duration', /(?<![\w.-])\d+(?:\.\d+)?(?:ns|µs|us|ms|s|min|h)\b/],
   ['number', /(?<![\w.-])\d[\d,_]*(?:\.\d+)?%?(?![\w])/],

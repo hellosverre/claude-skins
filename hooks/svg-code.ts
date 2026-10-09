@@ -70,9 +70,10 @@ function cutTokens(tokens: Token[], max: number): Token[] {
 }
 
 // `hasControl` leaves the header's right corner free for a Copy button laid over it.
-export function codeSvg(code: string, lang: string, palette: Palette, width: number, hasControl = false): { source: string; width: number; height: number; alt: string } {
+// `maxLines` cuts the card short of its usual 80 lines, for a block folded under it.
+export function codeSvg(code: string, lang: string, palette: Palette, width: number, hasControl = false, maxLines = MAX_LINES): { source: string; width: number; height: number; alt: string } {
   const all = code.replace(/\t/g, '  ').split('\n')
-  const lines = all.slice(0, MAX_LINES)
+  const lines = all.slice(0, maxLines)
   const gutter = String(all.length).length * 8 + 24
   const maxChars = Math.floor((width - gutter - 24) / (CODE * 0.6))
   const color: Readonly<Record<Token['role'], string>> = {

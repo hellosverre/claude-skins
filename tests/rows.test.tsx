@@ -1114,10 +1114,24 @@ test('long shell output folds to its head and tail on the terminal, each stream 
   const ui = await $.ui.mount(shellResult(id, { stdout, stderr: 'warn: slow disk', interrupted: false }))
   expect(await ui.find({ type: 'Text', text: 'line 8' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'line 9' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: '… 28 lines hidden' })).toBeDefined()
+  // The hidden run is a control that opens it, and `less` folds it again.
+  const fold = async () => ((await ui.find({ key: 'fold-output' })) as { props: { label: string } } | undefined)?.props.label
+  expect(await fold()).toBe('▾ 28 more')
   expect(await ui.find({ type: 'Text', text: 'line 37' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'line 40' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'warn: slow disk' })).toBeDefined()
+  await ui.press({ key: 'fold-output' })
+  expect(await ui.find({ type: 'Text', text: 'line 20' })).toBeDefined()
+  expect(await fold()).toBe('▴ less')
+  await ui.press({ key: 'fold-output' })
+  expect(await ui.find({ type: 'Text', text: 'line 20' })).toBeUndefined()
+
+  // With folding off nothing is hidden and there is no control.
+  await ui.unmount()
+  await runSkin($, 'fold off')
+  const whole = await $.ui.mount(shellResult(id, { stdout, stderr: '', interrupted: false }))
+  expect(await whole.find({ type: 'Text', text: 'line 20' })).toBeDefined()
+  expect(await whole.find({ key: 'fold-output' })).toBeUndefined()
 })
 
 test('/skin shell off gives shell output back to Claude Code on both surfaces', async ($, on) => {

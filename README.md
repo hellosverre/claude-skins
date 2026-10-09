@@ -59,7 +59,7 @@ To keep it installed but go back to Claude Code's own drawing, run `/skin off`.
 | `/skin <name>` | Switch skin: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `rose-pine`, `nord`, `gruvbox`, `kanagawa`, `everforest`, `one-dark`, `solarized`, `night-owl`, `ayu`, `github`, `mono` |
 | `/skin list` | Every skin, yours included |
 | `/skin off` | Back to Claude Code's own drawing |
-| `/skin rail\|shimmer\|band\|clip\|markdown\|quiet\|charts\|math\|commands\|shell\|highlight\|hints on\|off` | Toggle one part |
+| `/skin rail\|shimmer\|band\|clip\|markdown\|quiet\|charts\|math\|commands\|shell\|highlight\|hints\|links\|copy\|fold on\|off` | Toggle one part |
 | `/skin calm` · `calm off` | No motion, one line per tool row, read-only output folded, failures always whole. `calm off` puts back what you had |
 | `/skin copy` · `copy code` | Copy Claude's last reply, or just its last code block |
 | `/skin tables on\|text\|off` | `text` draws tables and code as selectable text on the desktop |
@@ -116,8 +116,10 @@ Drawn by the mod's own card code (`scripts/previews.ts`), not screenshots.
 | Spinner | Animated icon per phase | The skin's word with a band of light |
 | Above the prompt | Context and plan-limit rings, Compact button, nudge at 70% | Block meters, same button |
 | Your prompts | Rounded outline | The same |
+| Links and files | URLs are the app's own links; tool rows colour files this turn created (`ok`) or edited (`warn`) | URLs in prose are OSC 8 links where the terminal draws them (`FORCE_HYPERLINK=1` or `0` overrides the check), plain text elsewhere; paths with `:line`, numbers and versions coloured, this turn's files in `ok` or `warn` in rows and prose |
+| Long blocks | Code cards past 24 lines cut there, with `▾ N more` | Code past 24 lines, tables past 14 rows and shell output past 8 + 4 lines fold behind `▾ N more` / `▴ less` |
 
-Every card has a Copy button and animates once, on first draw, respecting reduced motion. Only the
+Every card has a Copy button (tables also `as text`, the table as drawn; a reply of several blocks ends in `copy reply`) and animates once, on first draw, respecting reduced motion. Only the
 drawing changes: the stored conversation and what the model reads are untouched. Agents, plan mode
 and the permission prompt keep Claude Code's own drawing.
 
@@ -157,6 +159,8 @@ scripts/bench.sh
 | Slash-command errors and `/skin`'s own output | Claude Code's own row | test "slash-command output with key: value lines is a table, prose keeps its row" |
 | `/skin calm` and Claude Code's spinner | Calm hands the spinner back to Claude Code, whose own spinner still moves | `Spinner` in [`hooks/register.tsx`](hooks/register.tsx) |
 | The settings pane on mobile | A line saying to use the terminal or the desktop app | `Pane` in [`hooks/register.tsx`](hooks/register.tsx) |
+| File paths as links | Coloured, not clickable: the engine's `Link` takes only `https:` and `http://localhost` | `safeHref` in [`hooks/links.ts`](hooks/links.ts) |
+| Folding on the desktop | Code cards fold; table cards and the shell card keep their full height or their own 6 + 6 fold | [`hooks/fold.tsx`](hooks/fold.tsx) |
 | Icons and the rail | Icons on the desktop only (the terminal draws no `Svg`); the rail on the terminal only | `lookOf` in [`hooks/register.tsx`](hooks/register.tsx) |
 
 ## Compared with

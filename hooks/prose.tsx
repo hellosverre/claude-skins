@@ -1,4 +1,5 @@
 import type { AlertType, Block, Line, Run, RunStyle, Task } from './blocks'
+import { safeHref, touchOf } from './links'
 import type { Look } from './rows'
 import type { Palette } from './skin'
 
@@ -22,12 +23,30 @@ const SLOTS: Partial<Record<RunStyle, keyof Palette>> = {
   duration: 'user',
   version: 'mcp',
   path: 'read',
+  url: 'web',
+}
+
+// The colour a path takes: created this turn (ok), edited (warn), else the path colour.
+function pathSlot(look: Look, text: string): keyof Palette {
+  const touch = look.touched === undefined ? undefined : touchOf(look.touched.files, text, look.touched.cwd)
+
+  return touch === 'created' ? 'ok' : touch === 'edited' ? 'warn' : 'read'
 }
 
 function runText(look: Look, run: Run) {
-  const { Text } = look.ui
+  const { Link, Text } = look.ui
   const { palette } = look.skin
-  const slot = SLOTS[run.style]
+  const slot = run.style === 'path' ? pathSlot(look, run.text) : SLOTS[run.style]
+  const href = run.style === 'url' && look.links === true ? safeHref(run.text) : null
+
+  // A URL the engine's Link takes is one where the surface draws links; any other is text.
+  if (href !== null) {
+    return (
+      <Text color={palette.web} underline>
+        <Link href={href}>{run.text}</Link>
+      </Text>
+    )
+  }
 
   return (
     <Text
