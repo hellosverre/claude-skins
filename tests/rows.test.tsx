@@ -467,6 +467,32 @@ test('a Mermaid fence is a chart card on the desktop and a laid-out diagram in t
   await shares.unmount()
 })
 
+const GANTT = '```mermaid\ngantt\n  title Launch\n  dateFormat YYYY-MM-DD\n  section Build\n  Parser :done, p1, 2026-10-01, 4d\n  Cards :after p1, 3d\n```'
+const GIT = '```mermaid\ngitGraph\n  commit id: "init"\n  branch dev\n  commit\n  checkout main\n  merge dev tag: "v1"\n```'
+
+test('the new chart kinds draw as cards on the desktop and as cell art in the terminal', async ($, on) => {
+  stubEngine(on)
+
+  const desktop = await $.ui.mount(chartReply('desktop', GANTT))
+  const card = (await desktop.find({ type: 'Svg' })) as { props: { source: string; alt: string } } | undefined
+  expect(card?.props.source).toContain('Parser')
+  expect(card?.props.alt).toContain('Cards: 2026-10-05 to 2026-10-08')
+  await desktop.unmount()
+
+  const gantt = await $.ui.mount(chartReply('terminal', GANTT))
+  expect(await gantt.find({ type: 'Svg' })).toBeUndefined()
+  expect(await gantt.find({ type: 'Text', text: 'GANTT' })).toBeDefined()
+  const bars = (await gantt.findAll({ type: 'Text' })).map(text => JSON.stringify(text.children ?? []))
+  expect(bars.some(row => row.includes('█'))).toBe(true)
+  await gantt.unmount()
+
+  const git = await $.ui.mount(chartReply('terminal', GIT))
+  expect(await git.find({ type: 'Text', text: 'GIT GRAPH' })).toBeDefined()
+  const lanes = (await git.findAll({ type: 'Text' })).map(text => JSON.stringify(text.children ?? []))
+  expect(lanes.some(row => row.includes('◉'))).toBe(true)
+  await git.unmount()
+})
+
 const textOf = (node: unknown): string =>
   typeof node === 'string' ? node : ((node as { children?: readonly unknown[] }).children ?? []).map(textOf).join('')
 

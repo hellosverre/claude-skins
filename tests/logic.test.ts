@@ -18,8 +18,9 @@ import { inlineRuns, splitBlocks } from '../hooks/blocks'
 import { errorLine, isQuiet, isReadOnlyShell, segmentsOf } from '../hooks/quiet'
 import tokyoNight from '../hooks/themes/tokyo-night'
 import { chartHeading, formatPercent, niceStep, parseMermaid, seriesName } from '../hooks/mermaid'
-import type { Flow, Pie, XyChart } from '../hooks/mermaid'
+import type { Flow, Gantt, GitGraph, Journey, Kanban, Mindmap, Pie, Quadrant, Radar, Sankey, Timeline, XyChart } from '../hooks/mermaid'
 import { chartSvg } from '../hooks/svg-chart'
+import { chartArt } from '../hooks/chart-art'
 import { blockBar, dotRule } from '../hooks/chart-rows'
 
 const NAMES = ['tokyo-night', 'dracula', 'nord']
@@ -545,6 +546,200 @@ test('percents drop a trailing zero, and unnamed series are named by kind', asyn
 
   const chart = parseMermaid('xychart-beta\n  x-axis [a]\n  bar [1]\n  line [2]\n  line "Goal" [3]\n  line [4]') as XyChart
   expect(chart.series.map((_, i) => seriesName(chart, i))).toEqual(['bar', 'line 1', 'Goal', 'line 2'])
+})
+
+const DAY = 86_400_000
+
+test('a gantt chains tasks with after, counts days and keeps its flags', async () => {
+  const gantt = parseMermaid([
+    'gantt',
+    '  title Launch',
+    '  dateFormat YYYY-MM-DD',
+    '  section Build',
+    '  Parser :done, p1, 2026-10-01, 4d',
+    '  Cards  :active, p2, after p1, 2w',
+    '  section Ship',
+    '  Tests  :crit, after p2, 1d',
+    '  Release :milestone, after p2, 0d',
+  ].join('\n')) as Gantt
+
+  expect(gantt.title).toBe('Launch')
+  expect(gantt.sections).toEqual(['Build', 'Ship'])
+  expect(gantt.tasks.map(task => [task.label, task.section, (task.end - task.start) / DAY])).toEqual([
+    ['Parser', 'Build', 4],
+    ['Cards', 'Build', 14],
+    ['Tests', 'Ship', 1],
+    ['Release', 'Ship', 0],
+  ])
+  expect(gantt.tasks[1]?.start).toBe(gantt.tasks[0]?.end)
+  expect(gantt.tasks.map(task => [task.done, task.active, task.crit, task.milestone])).toEqual([
+    [true, false, false, false],
+    [false, true, false, false],
+    [false, false, true, false],
+    [false, false, false, true],
+  ])
+  expect(chartHeading(gantt)).toEqual({ kind: 'Gantt', count: '4 tasks' })
+})
+
+test('a timeline groups events by period and section', async () => {
+  const timeline = parseMermaid('timeline\n  title Social\n  section Early\n  2002 : LinkedIn\n  2004 : Facebook : Google\n  section Video\n  2005 : YouTube') as Timeline
+
+  expect(timeline.title).toBe('Social')
+  expect(timeline.periods).toEqual([
+    { label: '2002', section: 'Early', events: ['LinkedIn'] },
+    { label: '2004', section: 'Early', events: ['Facebook', 'Google'] },
+    { label: '2005', section: 'Video', events: ['YouTube'] },
+  ])
+  expect(chartHeading(timeline)).toEqual({ kind: 'Timeline', count: '3 periods' })
+})
+
+test('a journey scores each step and gathers its actors', async () => {
+  const journey = parseMermaid('journey\n  title Day\n  section Work\n    Make tea: 5: Me\n    Do work: 1: Me, Cat') as Journey
+
+  expect(journey.actors).toEqual(['Me', 'Cat'])
+  expect(journey.steps.map(step => [step.label, step.score, step.actors])).toEqual([
+    ['Make tea', 5, ['Me']],
+    ['Do work', 1, ['Me', 'Cat']],
+  ])
+  expect(chartHeading(journey)).toEqual({ kind: 'Journey', count: '2 steps' })
+})
+
+test('a kanban reads columns, cards and their metadata', async () => {
+  const kanban = parseMermaid("kanban\n  Todo\n    [Write docs]\n    id2[Ship it]@{ assigned: 'sverre', priority: 'High' }\n  Done\n    [Pie]@{ ticket: 'SK-1' }") as Kanban
+
+  expect(kanban.columns.map(column => [column.label, column.cards.map(card => card.label)])).toEqual([
+    ['Todo', ['Write docs', 'Ship it']],
+    ['Done', ['Pie']],
+  ])
+  expect(kanban.columns[0]?.cards[1]).toEqual({ label: 'Ship it', assigned: 'sverre', priority: 'High', ticket: '' })
+  expect(kanban.columns[1]?.cards[0]?.ticket).toBe('SK-1')
+  expect(chartHeading(kanban)).toEqual({ kind: 'Kanban', count: '3 cards' })
+})
+
+test('a mindmap nests by indent and reads node shapes', async () => {
+  const mindmap = parseMermaid('mindmap\n  root((Skins))\n    Charts\n      Pie\n    [Themes]\n      Dark') as Mindmap
+
+  expect(mindmap.root.label).toBe('Skins')
+  expect(mindmap.root.shape).toBe('circle')
+  expect(mindmap.root.children.map(child => [child.label, child.shape, child.children.map(leaf => leaf.label)])).toEqual([
+    ['Charts', 'plain', ['Pie']],
+    ['Themes', 'square', ['Dark']],
+  ])
+  expect(mindmap.count).toBe(5)
+})
+
+test('a quadrant chart reads axes, quadrant names and points', async () => {
+  const chart = parseMermaid('quadrantChart\n  title Reach\n  x-axis Low --> High\n  y-axis Cold --> Hot\n  quadrant-1 Expand\n  A: [0.3, 0.6]\n  B: [0.9, 0.1]') as Quadrant
+
+  expect(chart.x).toEqual(['Low', 'High'])
+  expect(chart.y).toEqual(['Cold', 'Hot'])
+  expect(chart.quadrants[0]).toBe('Expand')
+  expect(chart.points).toEqual([
+    { label: 'A', x: 0.3, y: 0.6 },
+    { label: 'B', x: 0.9, y: 0.1 },
+  ])
+  expect(chartHeading(chart)).toEqual({ kind: 'Quadrant', count: '2 points' })
+})
+
+test('a radar reads axes across lines, its curves and range', async () => {
+  const radar = parseMermaid('radar-beta\n  title Grades\n  axis m["Math"], s["Science"]\n  axis e["English"]\n  curve a["Alice"]{85, 90, 80}\n  max 100\n  min 0') as Radar
+
+  expect(radar.axes.map(axis => axis.label)).toEqual(['Math', 'Science', 'English'])
+  expect(radar.curves).toEqual([{ id: 'a', label: 'Alice', values: [85, 90, 80] }])
+  expect([radar.min, radar.max]).toEqual([0, 100])
+  expect(chartHeading(radar)).toEqual({ kind: 'Radar', count: '1 curve' })
+})
+
+test('a sankey reads CSV flows and orders nodes from sources to sinks', async () => {
+  const sankey = parseMermaid('sankey-beta\nFarm,Mill,120\nMill,Bread,80\nMill,Waste,40\n"Imports, raw",Mill,10') as Sankey
+
+  expect(sankey.links.map(link => [link.from, link.to, link.value])).toEqual([
+    ['Farm', 'Mill', 120],
+    ['Mill', 'Bread', 80],
+    ['Mill', 'Waste', 40],
+    ['Imports, raw', 'Mill', 10],
+  ])
+  expect(sankey.nodes.indexOf('Farm')).toBeLessThan(sankey.nodes.indexOf('Mill'))
+  expect(sankey.nodes.indexOf('Mill')).toBeLessThan(sankey.nodes.indexOf('Bread'))
+  expect(chartHeading(sankey)).toEqual({ kind: 'Sankey', count: '4 flows' })
+})
+
+test('a git graph tracks branches, merges and cherry-picks', async () => {
+  const git = parseMermaid([
+    'gitGraph',
+    '  commit id: "init"',
+    '  branch dev',
+    '  checkout dev',
+    '  commit id: "feat" type: HIGHLIGHT',
+    '  checkout main',
+    '  commit type: REVERSE',
+    '  merge dev tag: "v1"',
+    '  cherry-pick id: "feat"',
+  ].join('\n')) as GitGraph
+
+  expect(git.branches).toEqual(['main', 'dev'])
+  expect(git.commits.map(commit => [commit.branch, commit.type])).toEqual([
+    ['main', 'normal'],
+    ['dev', 'highlight'],
+    ['main', 'reverse'],
+    ['main', 'merge'],
+    ['main', 'cherry'],
+  ])
+  const merge = git.commits[3]
+  expect(merge?.tag).toBe('v1')
+  expect(merge?.parents).toEqual([git.commits[2]?.id, 'feat'])
+  expect(git.commits[4]?.from).toBe('feat')
+  expect(chartHeading(git)).toEqual({ kind: 'Git graph', count: '5 commits' })
+})
+
+test('broken plans and shapes parse to nothing rather than half a chart; a score out of range clamps', async () => {
+  expect(parseMermaid('gantt\n  title Empty')).toBeNull()
+  expect(parseMermaid('gantt\n  dateFormat YYYY-MM-DD\n  Task :a1, after nowhere, 2d')).toBeNull()
+  expect((parseMermaid('journey\n  section Work\n    Make tea: 9: Me') as Journey).steps[0]?.score).toBe(5)
+  expect(parseMermaid('radar-beta\n  axis a, b, c\n  curve x{1, 2}')).toBeNull()
+  expect(parseMermaid('sankey-beta\nA,B,lots')).toBeNull()
+  expect(parseMermaid('gitGraph\n  commit\n  checkout nowhere')).toBeNull()
+  expect(parseMermaid('quadrantChart\n  A: [1.5, 0.2]')).toBeNull()
+})
+
+const SAMPLES = [
+  'gantt\n  dateFormat YYYY-MM-DD\n  Parser :p1, 2026-10-01, 4d\n  Cards :after p1, 3d',
+  'timeline\n  2002 : LinkedIn\n  2004 : Facebook',
+  'journey\n  section Work\n    Make tea: 5: Me\n    Do work: 1: Me',
+  'kanban\n  Todo\n    [Write docs]\n  Done\n    [Pie]',
+  'mindmap\n  root((Skins))\n    Charts\n    Themes',
+  'quadrantChart\n  x-axis Low --> High\n  y-axis Cold --> Hot\n  A: [0.3, 0.6]',
+  'radar-beta\n  axis a["Speed"], b["Power"], c["Range"]\n  curve x["Ship"]{3, 4, 5}',
+  'sankey-beta\nFarm,Mill,120\nMill,Bread,80',
+  'gitGraph\n  commit\n  branch dev\n  commit\n  checkout main\n  merge dev',
+]
+
+test('every new kind draws a card with a readable alt, and art that ascii mode keeps to ASCII', async () => {
+  for (const source of SAMPLES) {
+    const chart = parseMermaid(source)
+    expect(chart).not.toBeNull()
+    if (chart === null) continue
+
+    const card = chartSvg(chart, tokyoNight.palette, 640)
+    expect(card?.source.startsWith('<svg')).toBe(true)
+    expect(card?.alt.length).toBeGreaterThan(0)
+
+    const art = chartArt(chart, 80, true)
+    expect(art).not.toBeNull()
+    const text = art?.rows.map(row => row.map(segment => segment.text).join('')).join('\n') ?? ''
+    expect(text.length).toBeGreaterThan(0)
+    expect(/^[\x20-\x7e\n]*$/.test(text)).toBe(true)
+    expect(art?.rows.every(row => row.reduce((sum, segment) => sum + segment.text.length, 0) <= 80)).toBe(true)
+  }
+})
+
+test('the gantt card lays tasks on dates, and the alt reads them back', async () => {
+  const gantt = parseMermaid('gantt\n  title Plan\n  dateFormat YYYY-MM-DD\n  Parser :done, p1, 2026-10-01, 4d\n  Cards :after p1, 3d') as Gantt
+  const card = chartSvg(gantt, tokyoNight.palette, 640)
+
+  expect(card?.source).toContain('Parser')
+  expect(card?.alt).toContain('Parser: 2026-10-01 to 2026-10-05 (done)')
+  expect(card?.alt).toContain('Cards: 2026-10-05 to 2026-10-08')
 })
 
 test('splitReply can leave tables and turned-down fences as text', async () => {
