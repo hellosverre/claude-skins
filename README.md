@@ -52,14 +52,14 @@ Needs Claude Code 2.1.287 or later, in a terminal or the desktop app's Code tab.
 | Edits | A diff card: file, `+N −M`, numbered changed lines in green and red | Claude Code's own diff |
 | Shell commands | A terminal card: status pill, output with stderr apart, long output folded, and a Copy button for the output | Claude Code's own output |
 | Tables in replies | An animated card: header rule, zebra rows, swatches for colours, coloured diffs; Copy gives the markdown | A cell grid with a header band and zebra rows, and the same Copy |
-| Code blocks in replies | A card with the language, line numbers and highlighting, and a Copy button | Claude Code's own markdown, and a Copy button |
+| Code blocks in replies | A card with the language, line numbers and highlighting, and a Copy button; shell blocks (`bash`, `sh`, `powershell` …) keep the app's own block and its Run button | Claude Code's own markdown, and a Copy button |
 | Spinner | An animated icon per phase: thinking, tool use, writing, waiting | The skin's word with a band of light through it |
 | Above the prompt | Rings for context and each plan limit, a Compact button, and a nudge to compact from 70% context | Block meters and the same button |
 | Turn footer | (not raised on desktop) | Time, tool count and lines changed |
 | Your prompts | A rounded outline sized to what you typed; attached images stay below it | The same |
 | The question dialog | A band naming its topics above Claude Code's own dialog | The same |
 
-Every card rises in row by row and respects reduced motion. A skin only changes what is drawn: the stored
+Every card rises in row by row once, when first drawn, and respects reduced motion. A skin only changes what is drawn: the stored
 conversation, and what the model reads, are untouched. Agents, plan mode and the permission prompt keep
 Claude Code's own drawing. The default skin is **noir**, black and white. Cards have no background of
 their own, so they sit in the page. On a light Claude Code theme every skin switches to its light palette. With the `auto` theme it

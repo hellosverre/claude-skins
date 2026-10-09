@@ -9,7 +9,7 @@ import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
 import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
 import { clipLines, diffstat, pick } from './format'
-import { splitReply } from './markdown'
+import { isShell, splitReply } from './markdown'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
@@ -524,7 +524,11 @@ reply width: ${lastColumns} columns`
     const segments = splitReply(text)
     const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
 
-    if (!fits || !segments.some(segment => segment.kind !== 'text')) {
+    // Off the terminal a shell fence keeps the app's drawing, for its Run button; a reply
+    // with nothing else to draw is left to the app whole.
+    const drawn = e.surface === 'terminal' ? segments : segments.filter(segment => !isShell(segment))
+
+    if (!fits || !drawn.some(segment => segment.kind !== 'text')) {
       return next(e)
     }
 

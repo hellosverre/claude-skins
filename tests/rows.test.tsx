@@ -381,6 +381,22 @@ test('a card animates on its first draw only, so a streaming reply does not flic
   expect(other).not.toContain('animation:none!important')
 })
 
+test('on the desktop a shell fence keeps the app’s own block, for its Run button', async ($, on) => {
+  stubEngine(on)
+
+  const reply = (requestId: string, text: string) =>
+    ({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId, props: { text, isFirstOfReply: true } }) as const
+
+  const alone = await $.ui.mount(reply('sh1', 'Run:\n\n```bash\npnpm test\n```'))
+  expect(await alone.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  await alone.unmount()
+
+  const mixed = await $.ui.mount(reply('sh2', '| a | b |\n|---|---|\n| 1 | 2 |\n\n```bash\npnpm test\n```'))
+  const markdown = (await mixed.find({ type: 'Markdown', text: 'pnpm test' })) as { props: { text: string } } | undefined
+  expect(markdown?.props.text).toContain('```bash')
+  expect(await mixed.find({ type: 'Svg' })).toBeDefined()
+})
+
 test('on the desktop an edit is a diff card and a shell command a terminal card', async ($, on) => {
   stubEngine(on)
 

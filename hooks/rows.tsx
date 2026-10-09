@@ -2,7 +2,7 @@ import type { ElementTable, RenderSurface } from 'claude-code'
 
 import type { Prefs, TurnStats } from '../types'
 import { formatDuration, formatMs } from './format'
-import { columnWidths, cutCell } from './markdown'
+import { columnWidths, cutCell, isShell } from './markdown'
 import type { Segment, Table } from './markdown'
 import type { Icons, Kind, Skin } from './skin'
 import { spinnerIcon, toolIcon } from './icons'
@@ -384,6 +384,11 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
       {segments.map((segment, i) => {
         if (segment.kind === 'text') {
           return <Markdown text={segment.text} />
+        }
+
+        // A shell fence on the desktop stays the app's own block, which has Run and Copy.
+        if (segment.kind === 'code' && Svg !== undefined && isShell(segment)) {
+          return <Markdown text={segment.raw} />
         }
 
         if (segment.kind === 'code') {
