@@ -52,8 +52,10 @@ jobs:
 
       # The engine writes the API's declarations beside a mod it loads from a folder. The
       # print run has no credentials, so it stops after loading; the types are what it
-      # leaves behind. tsconfig.json reads them from .claude/types.
+      # leaves behind. tsconfig.json reads them from .claude/types. Type-checked against
+      # the pinned build only: 2.1.296 no longer lays them on a print run without login.
       - name: Lay the plugin API types
+        if: matrix.claude != 'latest'
         env:
           ANTHROPIC_API_KEY: ''
         run: |
@@ -64,4 +66,5 @@ jobs:
           rm -f .claude/types/tsconfig.json
 
       - name: Type check
+        if: matrix.claude != 'latest'
         run: npx -y -p typescript@5.9.3 tsc -p tsconfig.json
