@@ -1,8 +1,9 @@
 import type { ElementTable, RenderSurface } from 'claude-code'
 
-import type { Prefs, TurnStats } from '../types'
+import type { Prefs, Touch, TurnStats } from '../types'
 import { formatDuration, formatMs } from './format'
-import { columnWidths, cutCell, isShell } from './markdown'
+import { columnWidths, cutCell, isShell, tableArt } from './markdown'
+import { FOLD_CODE, FOLD_ROWS, foldButton, shownCount } from './fold'
 import type { Segment, Table } from './markdown'
 import { splitBlocks } from './blocks'
 import { artRows, chartRows } from './chart-rows'
@@ -30,7 +31,7 @@ import { kindOf, toolLabel } from './tools'
 import { inlineMath, mathArt, parseTex } from './math'
 import { mathSvg } from './svg-math'
 
-export type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Markdown' | 'Button' | 'Code'>
+export type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Markdown' | 'Button' | 'Code' | 'Link'>
 
 // The vector element, on the surfaces that have one (the desktop app).
 export type SvgElement = ElementTable<'desktop'>['Svg']
@@ -48,6 +49,12 @@ export type Look = {
   // True the first time this drawing shows the card by that key; a card drawn again is
   // drawn settled. Absent, every card animates.
   isFirstDraw?: (key: string) => boolean
+  // Bare URLs drawn as links: the terminal's OSC 8, the desktop's anchors. Absent, text.
+  links?: boolean
+  // The files this turn created or edited, by absolute path, and the folder paths are under.
+  touched?: { files: Readonly<Record<string, Touch>>; cwd: string }
+  // The blocks the person unfolded, by key, and how to flip one. Absent, nothing folds.
+  folds?: { open: ReadonlySet<string>; toggle: (key: string) => void }
 }
 
 export type Call = {
@@ -188,9 +195,11 @@ function iconRow(look: Look, Svg: SvgElement, kind: Kind, calls: readonly Call[]
   )
 }
 
-export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta: Meta, label = toolLabel(call.tool)) {
+// `touch` colours the target of a file this turn created (ok) or edited (warn).
+export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta: Meta, label = toolLabel(call.tool), touch?: Touch) {
   const { Text } = look.ui
   const { palette } = look.skin
+  const targetColor = call.isErrored ? palette.err : touch === 'created' ? palette.ok : touch === 'edited' ? palette.warn : palette.muted
 
   if (look.svg !== undefined) {
     const line = (
@@ -198,7 +207,7 @@ export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta
         <Text color={palette[kind]} bold>
           {label}
         </Text>
-        <Text color={call.isErrored ? palette.err : palette.muted}>{`  ${target}`}</Text>
+        <Text color={targetColor}>{`  ${target}`}</Text>
       </Text>
     )
 
@@ -209,7 +218,7 @@ export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta
     <Text wrap="truncate-end">
       {node(look, [call])}
       <Text color={palette[kind]}>{label}</Text>
-      <Text color={call.isErrored ? palette.err : palette.muted}>{`  ${target}`}</Text>
+      <Text color={targetColor}>{`  ${target}`}</Text>
     </Text>
   )
 
@@ -298,8 +307,10 @@ const NATURAL_SHARE = 0.55
 // A grid of cells, so columns line up in the terminal's monospace and in the desktop
 // app's proportional font alike. `control`, such as a Copy button, sits on the frame's
 // top border at the right, as ╭──── Copy ─╮.
-export function tableRows(look: Look, table: Table, maxWidth: number, control?: ReturnType<Ui['Button']>) {
+// Past FOLD_ROWS rows it folds under `foldKey`.
+export function tableRows(look: Look, table: Table, maxWidth: number, control?: ReturnType<Ui['Button']>, foldKey = 'fold-table') {
   const { Box, Text } = look.ui
+  const rows = table.rows.slice(0, shownCount(look, foldKey, table.rows.length, FOLD_ROWS))
   const { palette } = look.skin
   const widths = columnWidths(table, maxWidth - 4, CELL_PAD * 2)
   const natural = widths.reduce((sum, width) => sum + width + CELL_PAD * 2, 2)
@@ -320,16 +331,17 @@ export function tableRows(look: Look, table: Table, maxWidth: number, control?: 
     </Box>
   )
 
-  return (
+  const fold = foldButton(look, foldKey, table.rows.length, FOLD_ROWS)
+  const frame = (
     <Box
       flexDirection="column"
-      marginY={1}
+      marginY={fold === '' ? 1 : 0}
       borderStyle="round"
       borderColor={palette.muted}
       {...(isFluid ? { width: '100%' } : { alignSelf: 'flex-start' as const })}
     >
       {row(table.header, true, palette.surface)}
-      {table.rows.map((cells, i) => row(cells, false, i % 2 === 1 ? palette.zebra : undefined))}
+      {rows.map((cells, i) => row(cells, false, i % 2 === 1 ? palette.zebra : undefined))}
       {control === undefined ? (
         ''
       ) : (
@@ -337,6 +349,15 @@ export function tableRows(look: Look, table: Table, maxWidth: number, control?: 
           {control}
         </Box>
       )}
+    </Box>
+  )
+
+  return fold === '' ? (
+    frame
+  ) : (
+    <Box flexDirection="column" marginY={1}>
+      {frame}
+      {fold}
     </Box>
   )
 }
@@ -366,10 +387,31 @@ function cardWithCopy(look: Look, Svg: SvgElement, built: { source: string; alt:
   )
 }
 
+// Copy takes the markdown; `as text` under the card takes the table as drawn.
 function tableCard(look: Look, table: Table, Svg: SvgElement, columns: number, key: string) {
+  const { Box } = look.ui
   const card = tableSvg(table, look.skin.palette, cardWidth(columns), look.copy !== undefined)
 
-  return cardWithCopy(look, Svg, card, key, tableMarkdown(table))
+  return (
+    <Box flexDirection="column">
+      {cardWithCopy(look, Svg, card, key, tableMarkdown(table))}
+      {copyRow(look, `${key}-art`, tableArt(table), 'Copy as text')}
+    </Box>
+  )
+}
+
+// The table's two copies on its frame: markdown, and the table as drawn.
+function tableControls(look: Look, key: string, table: Table) {
+  const { Box } = look.ui
+  const markdown = copyButton(look, key, tableMarkdown(table))
+  const art = copyButton(look, `${key}-art`, tableArt(table), ' as text ')
+
+  return markdown === undefined || art === undefined ? undefined : (
+    <Box flexDirection="row">
+      {markdown}
+      {art}
+    </Box>
+  )
 }
 
 function mathCard(look: Look, tex: string, Svg: SvgElement, columns: number, key: string) {
@@ -403,15 +445,15 @@ const tableMarkdown = (table: Table): string =>
   [table.header, table.header.map(() => '---'), ...table.rows].map(cells => `| ${cells.join(' | ')} |`).join('\n')
 
 // A Copy button padded to sit on a border line; nothing where nothing can copy.
-export function copyButton(look: Look, key: string, text: string) {
+export function copyButton(look: Look, key: string, text: string, label = ' Copy ') {
   const { Button } = look.ui
   const copy = look.copy
 
-  return copy === undefined ? undefined : <Button key={key} label=" Copy " plain dimColor onPress={() => copy(text)} />
+  return copy === undefined ? undefined : <Button key={key} label={label} plain dimColor onPress={() => copy(text)} />
 }
 
 // A small Copy button under a card or block, flush right; nothing where nothing can copy.
-export function copyRow(look: Look, key: string, text: string) {
+export function copyRow(look: Look, key: string, text: string, label = 'Copy') {
   const { Box, Button } = look.ui
   const copy = look.copy
 
@@ -421,12 +463,13 @@ export function copyRow(look: Look, key: string, text: string) {
 
   return (
     <Box flexDirection="row" justifyContent="flex-end">
-      <Button key={key} label="Copy" plain dimColor onPress={() => copy(text)} />
+      <Button key={key} label={label} plain dimColor onPress={() => copy(text)} />
     </Box>
   )
 }
 
-export function replyRows(look: Look, segments: readonly Segment[], maxWidth: number, Svg?: SvgElement) {
+// `whole`, the reply as Claude wrote it, adds a `copy reply` control under it.
+export function replyRows(look: Look, segments: readonly Segment[], maxWidth: number, Svg?: SvgElement, whole?: string) {
   const { Box, Markdown } = look.ui
 
   return (
@@ -485,7 +528,7 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
 
           // The terminal highlights the languages it knows in the skin's colours.
           if (look.surface === 'terminal' && look.prefs.highlight && languageOf(segment.lang) !== undefined) {
-            return codeRows(look, segment.lang, segment.code, copyButton(look, `copy-${i}`, segment.code))
+            return codeRows(look, segment.lang, segment.code, copyButton(look, `copy-${i}`, segment.code), `fold-${i}`)
           }
 
           return Svg === undefined ? (
@@ -494,16 +537,17 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
               {copyRow(look, `copy-${i}`, segment.code)}
             </Box>
           ) : (
-            codeCard(look, segment.lang, segment.code, Svg, maxWidth, `copy-${i}`)
+            codeCard(look, segment.lang, segment.code, Svg, maxWidth, `copy-${i}`, `fold-${i}`)
           )
         }
 
         return Svg === undefined ? (
-          tableRows(look, segment, maxWidth, copyButton(look, `copy-${i}`, tableMarkdown(segment)))
+          tableRows(look, segment, maxWidth, tableControls(look, `copy-${i}`, segment), `fold-${i}`)
         ) : (
           tableCard(look, segment, Svg, maxWidth, `copy-${i}`)
         )
       })}
+      {whole === undefined ? '' : copyRow(look, 'copy-reply', whole, 'copy reply')}
     </Box>
   )
 }
@@ -591,8 +635,22 @@ function card(look: Look, Svg: SvgElement, built: { source: string; alt: string 
   )
 }
 
-export function codeCard(look: Look, lang: string, code: string, Svg: SvgElement, columns: number, key = 'copy-code') {
-  return cardWithCopy(look, Svg, codeSvg(code, lang, look.skin.palette, cardWidth(columns), look.copy !== undefined), key, code)
+// Past FOLD_CODE lines the card is cut there, with `▾ N more` under it; opened, it runs to
+// the card's own 80-line cap.
+export function codeCard(look: Look, lang: string, code: string, Svg: SvgElement, columns: number, key = 'copy-code', foldKey = `${key}-fold`) {
+  const { Box } = look.ui
+  const count = code.split('\n').length
+  const shown = shownCount(look, foldKey, count, FOLD_CODE)
+  const card = cardWithCopy(look, Svg, codeSvg(code, lang, look.skin.palette, cardWidth(columns), look.copy !== undefined, shown === count ? undefined : shown), key, code)
+
+  return look.folds === undefined || count <= FOLD_CODE ? (
+    card
+  ) : (
+    <Box flexDirection="column">
+      {card}
+      {foldButton(look, foldKey, count, FOLD_CODE)}
+    </Box>
+  )
 }
 
 // A chart too crowded to draw at this width keeps its source as a code card.

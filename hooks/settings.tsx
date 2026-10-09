@@ -120,6 +120,9 @@ export function settingsPane(look: Look, ui: PaneUi, model: SettingsModel, actio
         {toggle('shell', 'h', prefs.shell)}
         {toggle('highlight', 'y', prefs.highlight)}
         {toggle('hints', 'n', prefs.hints)}
+        {toggle('links', 'l', prefs.links)}
+        {toggle('copy', 'p', prefs.copy)}
+        {toggle('fold', 'f', prefs.fold)}
         <Button key="calm" label={`calm ${mark(prefs.calm !== null)}`} hotkey="k" plain dimColor={prefs.calm === null} onPress={() => actions.calm()} />
         <Button key="icons" label={`icons ${prefs.icons}`} hotkey="i" plain onPress={() => actions.icons()} />
       </Box>

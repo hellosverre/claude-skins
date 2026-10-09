@@ -1,7 +1,7 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
-import type { CustomSkin, Disclosure, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
+import type { CustomSkin, Disclosure, Prefs, SkinSlot, Touch, TurnStats, UsageSnap } from '../types'
 import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES, withCalm } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
 import { forTheme, gnomeDark, macDark, resolveLight, windowsDark } from './light'
@@ -22,7 +22,7 @@ import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBan
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
 import { keepsOwnRow, SHELLS, shellResultOf } from './shell'
-import { shellRows } from './shell-rows'
+import { OUTPUT_FOLD, shellRows } from './shell-rows'
 import { settingsPane } from './settings'
 import { sightings } from './sightings'
 import { ICONS } from './skin'
@@ -31,9 +31,10 @@ import { hunksOf } from './svg-diff'
 import { shellOutputOf } from './svg-terminal'
 import { limitLabel, metersOf } from './svg-usage'
 import { shortenPath } from './format'
-import { kindOf, summarize } from './tools'
+import { kindOf, summarize, toolLabel } from './tools'
 import { commandOf, errorLine, isQuiet, quietLabel } from './quiet'
 import { isDue, isNewer, LATEST_URL, updateNotice, versionOf } from './updates'
+import { hyperlinksFrom, touchOf } from './links'
 import type { Checked } from './updates'
 
 const SETTINGS = 'skins-settings'
@@ -72,10 +73,16 @@ const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
 const disclosureAtom = atom({ plugin: 'skins', key: 'disclosure' } as const, 'auto' as Disclosure)
 // Whether an opened row shows its answer whole, past the fold.
 const allAtom = atom({ plugin: 'skins', key: 'showAll' } as const, false)
+// Files this turn created or edited, by absolute path.
+const touchedAtom = atom({ plugin: 'skins', key: 'touched' } as const, {} as Record<string, Touch>)
+const hyperlinksAtom = atom({ plugin: 'skins', key: 'hyperlinks' } as const, false)
+// Per drawing, the blocks the person unfolded.
+const foldsAtom = atom({ plugin: 'skins', key: 'folds' } as const, [] as string[])
 // The main loop's last answer, for `/skin copy`.
 const lastReplyAtom = atom({ plugin: 'skins', key: 'lastReply' } as const, '')
 
 const EDITS = new Set(['Edit', 'MultiEdit', 'Write'])
+const WRITES = new Set([...EDITS, 'NotebookEdit'])
 
 // Only a person's own typing becomes a prompt row: a task notification or a peer's
 // message is not theirs to dress as theirs.
@@ -178,8 +185,50 @@ const lookOf = (
   prefs: active.prefs,
   surface,
   ...(surface !== 'terminal' && ui.Svg !== undefined ? { svg: ui.Svg } : {}),
-  ...(copy === undefined ? {} : { copy }),
+  // `/skin copy off` takes every copy button away.
+  ...(copy === undefined || !active.prefs.copy ? {} : { copy }),
 })
+
+// What a drawing adds to its look from the session: links where they can be drawn, this
+// turn's files, and the blocks the person unfolded in it.
+async function sessionLook($: EngineInterface, e: { requestId: string; surface: RenderSurface }, look: Look): Promise<Look> {
+  const folds = memberOf(foldsAtom, e)
+  const open = new Set(await read($, folds))
+  const links = look.prefs.links && (e.surface !== 'terminal' || (await read($, hyperlinksAtom)))
+
+  return {
+    ...look,
+    links,
+    touched: { files: await read($, touchedAtom), cwd: await $.session.cwd() },
+    ...(look.prefs.fold
+      ? {
+          folds: {
+            open,
+            toggle: (key: string) =>
+              void update($, folds, keys => (keys.includes(key) ? keys.filter(kept => kept !== key) : [...keys, key])),
+          },
+        }
+      : {}),
+  }
+}
+
+// Whether the terminal draws OSC 8 links, from the environment it was started in.
+async function readHyperlinks($: EngineInterface): Promise<void> {
+  // Each name spelled out: the engine lists the variables a module reads from its source.
+  const supported = hyperlinksFrom({
+    FORCE_HYPERLINK: await $.env.get('FORCE_HYPERLINK'),
+    TERM_PROGRAM: await $.env.get('TERM_PROGRAM'),
+    TERM_PROGRAM_VERSION: await $.env.get('TERM_PROGRAM_VERSION'),
+    TERM: await $.env.get('TERM'),
+    WT_SESSION: await $.env.get('WT_SESSION'),
+    VTE_VERSION: await $.env.get('VTE_VERSION'),
+    KONSOLE_VERSION: await $.env.get('KONSOLE_VERSION'),
+    TMUX: await $.env.get('TMUX'),
+    CI: await $.env.get('CI'),
+  })
+
+  await update($, hyperlinksAtom, () => supported)
+}
 
 // A drawing's cards animate on their first draw only, keyed by the drawing's instance
 // (the message id, the tool_use_id) so two replies never share a card.
@@ -210,6 +259,10 @@ async function load($: EngineInterface): Promise<void> {
   await update($, customAtom, () => custom)
   await update($, prefsAtom, () => prefs)
   await update($, pinnedAtom, () => Object.hasOwn(folders, folder))
+  // Links stay text if the environment cannot be read; the look loads either way.
+  await readHyperlinks($).catch((error: unknown) => {
+    $.ui.log(`hyperlink check: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' })
+  })
 }
 
 // A pinned folder keeps its prefs to itself; every other folder shares the default.
@@ -313,7 +366,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | icons]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | links | fold | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -352,6 +405,7 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     stats = NO_STATS
     isWorking = true
+    await update($, touchedAtom, () => ({}))
     const now = await $.clock.now()
     await update($, startedAtom, () => now)
 
@@ -422,6 +476,14 @@ export const register: Register = on => {
     // The call's arguments ride on the event itself (`e.command` for Bash).
     if (isQuiet(e.tool, e)) {
       await update($, memberOf(quietAtom, { requestId: e.tool_use_id }), () => true)
+    }
+
+    // A file the call made or changed takes its colour in this turn's rows and prose.
+    const file = (e as { file_path?: unknown; notebook_path?: unknown }).file_path ?? (e as { notebook_path?: unknown }).notebook_path
+
+    if (WRITES.has(e.tool) && ran.deny === undefined && typeof file === 'string' && file !== '') {
+      const touch: Touch = (ran.result as { type?: unknown } | undefined)?.type === 'create' ? 'created' : 'edited'
+      await update($, touchedAtom, touched => (touched[file] === 'created' ? touched : { ...touched, [file]: touch }))
     }
 
     if (e.agentId === undefined && e.tool !== DESIGN && ran.deny === undefined) {
@@ -572,11 +634,13 @@ reply width: ${lastColumns} columns`
     const copy = (text: string) => {
       void $.ui.copy({ text, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
-    const look = { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }
-    const row =
-      active.prefs.quiet && isQuiet(e.props.tool, e.props.input)
-        ? toolRow(look, e.props, kind, target, meta, quietLabel(e.props.tool))
-        : toolRow(look, e.props, kind, target, meta)
+    const look = await sessionLook($, e, { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) })
+    const fields = (e.props.input ?? {}) as { file_path?: unknown; notebook_path?: unknown }
+    const path = fields.file_path ?? fields.notebook_path
+    // A file this turn made or changed keeps its colour in every row that names it.
+    const touch = typeof path === 'string' && look.touched !== undefined ? touchOf(look.touched.files, path, cwd) : undefined
+    const label = active.prefs.quiet && isQuiet(e.props.tool, e.props.input) ? quietLabel(e.props.tool) : toolLabel(e.props.tool)
+    const row = toolRow(look, e.props, kind, target, meta, label, touch)
 
     // The chevron opens the row onto the call's input and its answer.
     const disclosure = memberOf(disclosureAtom, e)
@@ -620,7 +684,7 @@ reply width: ${lastColumns} columns`
     const copy = (text: string) => {
       void $.ui.copy({ text, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
-    const look = active === null ? undefined : { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }
+    const look = active === null ? undefined : await sessionLook($, e, { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) })
     const columns = e.viewport?.columns ?? 100
     // An opened row draws the answer itself; one it cannot draw keeps Claude Code's here.
     const isOpened =
@@ -667,7 +731,9 @@ reply width: ${lastColumns} columns`
       const shell = shellResultOf(e.props.output, e.props.isErrored)
 
       if (shell !== null) {
-        const fold = { head: CLIP_HEAD, tail: CLIP_TAIL }
+        // `/skin fold off`, or the person's `▾ N more`, shows the output whole.
+        const isWhole = !look.prefs.fold || look.folds?.open.has(OUTPUT_FOLD) === true
+        const fold = isWhole ? null : { head: CLIP_HEAD, tail: CLIP_TAIL }
 
         return shellRows(look, await read($, memberOf(commandAtom, e)), shell, e.props.isErrored, {
           stdout: fold,
@@ -769,7 +835,10 @@ reply width: ${lastColumns} columns`
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: firstDraws(prefs, e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
+    const look = await sessionLook($, e, { ...lookOf(ui, active, e.surface, copy), isFirstDraw: firstDraws(prefs, e.requestId) })
+
+    // A reply of several blocks can be copied whole, as Claude wrote it.
+    return replyRows(look, segments, e.viewport?.columns ?? 100, svg, segments.length > 1 ? text : undefined)
   })
 
   // A slash command's output (`/cost`, `/context`, a plugin's) drawn the way a reply is: its
@@ -794,7 +863,7 @@ reply width: ${lastColumns} columns`
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
+    return replyRows(await sessionLook($, e, { ...lookOf(ui, active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }), segments, e.viewport?.columns ?? 100, svg)
   })
 
   // The terminal's spinner gets the skin's word with a shimmer; the desktop's keeps its

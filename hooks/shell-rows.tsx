@@ -11,15 +11,27 @@ import type { Folded, ShellLine, ShellResult } from './shell'
 // How many lines of each stream stay above and below the fold; null keeps every line.
 export type Fold = { head: number; tail: number } | null
 
-export function shellRows(look: Look, command: string, result: ShellResult, isErrored: boolean, folds: { stdout: Fold; stderr: Fold }) {
-  const { Box, Text } = look.ui
+// The key of the output's `▾ N more` control in the drawing's folds.
+export const OUTPUT_FOLD = 'fold-output'
+
+// Lines a stream may have before the drawing folds it, at the terminal card's 8 + 4.
+const FOLDS_PAST = 13
+
+export function shellRows(look: Look, command: string, result: ShellResult, isErrored: boolean, at: { stdout: Fold; stderr: Fold }) {
+  const { Box, Button, Text } = look.ui
   const { palette } = look.skin
   const lines = linesOf(result)
   const status = shellStatus(result, isErrored, look.prefs.icons === 'ascii')
   const fold = (stream: ShellLine[], at: Fold): Folded<ShellLine>[] => (at === null ? stream : foldLines(stream, at.head, at.tail))
-  const row = (line: Folded<ShellLine>) =>
+  const folds = look.folds
+  // stderr's fold control opens the same output; its key only keeps the two apart.
+  const row = (line: Folded<ShellLine>, key = OUTPUT_FOLD) =>
     'fold' in line ? (
-      <Text color={palette.muted}>{`… ${line.fold} lines hidden`}</Text>
+      folds === undefined ? (
+        <Text color={palette.muted}>{`… ${line.fold} lines hidden`}</Text>
+      ) : (
+        <Button key={key} label={`${look.prefs.icons === 'ascii' ? 'v' : '▾'} ${line.fold} more`} plain dimColor onPress={() => folds.toggle(OUTPUT_FOLD)} />
+      )
     ) : look.prefs.highlight && !line.isErr && line.text !== '' ? (
       outputLine(look, line.text)
     ) : (
@@ -45,9 +57,14 @@ export function shellRows(look: Look, command: string, result: ShellResult, isEr
         </Box>
       </Box>
       {isEmpty ? <Text color={palette.muted}>no output</Text> : ''}
-      {fold(lines.stdout, folds.stdout).map(row)}
+      {fold(lines.stdout, at.stdout).map(line => row(line))}
       {lines.stderr.length > 0 && lines.stdout.length > 0 ? <Text color={palette.muted}>stderr</Text> : ''}
-      {fold(lines.stderr, folds.stderr).map(row)}
+      {fold(lines.stderr, at.stderr).map(line => row(line, `${OUTPUT_FOLD}-err`))}
+      {folds?.open.has(OUTPUT_FOLD) === true && Math.max(lines.stdout.length, lines.stderr.length) > FOLDS_PAST ? (
+        <Button key={OUTPUT_FOLD} label={`${look.prefs.icons === 'ascii' ? '^' : '▴'} less`} plain dimColor onPress={() => folds.toggle(OUTPUT_FOLD)} />
+      ) : (
+        ''
+      )}
       {control === undefined ? (
         ''
       ) : (

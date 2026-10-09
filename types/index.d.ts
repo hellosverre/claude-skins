@@ -40,6 +40,12 @@ export type Prefs = {
   highlight: boolean
   // The model-only note that charts and diagrams draw here.
   hints: boolean
+  // Bare URLs as links: OSC 8 where the terminal draws it, anchors on the desktop.
+  links: boolean
+  // Copy buttons on tables, code, diagrams and whole replies.
+  copy: boolean
+  // Long code, tables and shell output folded behind a `▾ N more` control.
+  fold: boolean
   // While /skin calm is on, the parts it changed as they were before it, for calm off to
   // put back; null while it is off.
   calm: CalmSnapshot | null
@@ -66,6 +72,9 @@ export type UsageSnap = { context: number | null; limits: { label: string; perce
 // What one turn did, shown in its footer.
 export type TurnStats = { tools: number; added: number; removed: number }
 
+// What this turn did to a file: made it, or changed one that was there.
+export type Touch = 'created' | 'edited'
+
 // How a tool row stands: opened or closed by the person, or `auto`, open only when the
 // call failed.
 export type Disclosure = 'auto' | 'open' | 'closed'
@@ -89,6 +98,12 @@ declare module 'claude-code' {
       // Each tool row's chevron, and whether its opened answer shows past the fold.
       disclosure: StateFamily<Disclosure>
       showAll: StateFamily<boolean>
+      // Files the turn created or edited, by absolute path, for their colour in rows and prose.
+      touched: Record<string, Touch>
+      // Whether the terminal draws OSC 8 links, read from its environment at start.
+      hyperlinks: boolean
+      // Per drawing, the keys of the blocks the person unfolded.
+      folds: StateFamily<string[]>
       compacting: boolean
       pinned: boolean
       lastReply: string
