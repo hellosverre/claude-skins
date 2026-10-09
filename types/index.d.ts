@@ -113,8 +113,6 @@ declare module 'claude-code' {
       showAll: StateFamily<boolean>
       // Files the turn created or edited, by absolute path, for their colour in rows and prose.
       touched: Record<string, Touch>
-      // Whether the terminal draws OSC 8 links, read from its environment at start.
-      hyperlinks: boolean
       // Per drawing, the keys of the blocks the person unfolded.
       folds: StateFamily<string[]>
       compacting: boolean

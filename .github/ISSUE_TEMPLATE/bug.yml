@@ -41,6 +41,7 @@ body:
         - Tool rows (rail, icons, shimmer)
         - Tables
         - Code blocks and diffs
+        - Links, copy and folding
         - Charts, Mermaid or math
         - Usage band
         - Themes and light/dark
@@ -61,7 +62,7 @@ body:
     attributes:
       label: Versions
       description: Skins version from `/plugin`, and `claude --version`.
-      placeholder: skins 0.3.0, Claude Code 2.x
+      placeholder: skins 0.5.0, Claude Code 2.1.288
     validations:
       required: true
   - type: input
