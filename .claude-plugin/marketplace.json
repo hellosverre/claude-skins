@@ -1,12 +1,17 @@
 {
   "name": "hellosverre-mods",
-  "description": "Mods for Claude Code that change how it looks.",
+  "description": "Mods for Claude Code: how it looks, and what it shows you.",
   "owner": { "name": "hellosverre", "url": "https://github.com/hellosverre" },
   "plugins": [
     {
       "name": "skins",
       "source": "./",
       "description": "Skins for Claude Code: tool rows with icons, diff, table and Mermaid chart cards, a usage band and fifteen themes. /skin swaps them live."
+    },
+    {
+      "name": "redgreen",
+      "source": { "source": "github", "repo": "hellosverre/redgreen" },
+      "description": "Test results in a pane: failures from Claude's vitest, jest, pytest, cargo, go, bun and deno runs, their detail and run history."
     }
   ]
 }
