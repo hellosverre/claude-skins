@@ -11,7 +11,13 @@ export type Body = { body: string; height: number }
 
 const SERIES: readonly Slot[] = ['user', 'read', 'ok', 'warn', 'web', 'mcp', 'search', 'err']
 
-export const seriesColor = (palette: Palette, i: number): string => palette[SERIES[i % SERIES.length] ?? 'user']
+// A colour an earlier slot already gave is skipped, so two series never share one where a
+// skin reuses a colour (rose-pine's read and ok), and the terminal art paints by this too.
+export function seriesColor(palette: Palette, i: number): string {
+  const colors = SERIES.map(slot => palette[slot].toLowerCase()).filter((color, at, all) => all.indexOf(color) === at)
+
+  return colors[i % colors.length] ?? palette.user
+}
 
 export const text = (x: number, y: number, body: string, attrs = ''): string => `<text x="${x}" y="${y}"${attrs === '' ? '' : ` ${attrs}`}>${escape(body)}</text>`
 

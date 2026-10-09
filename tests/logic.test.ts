@@ -22,6 +22,8 @@ import type { Architecture, Block, C4, Flow, Gantt, GitGraph, Journey, Kanban, M
 import { chartSvg } from '../hooks/svg-chart'
 import { chartArt } from '../hooks/chart-art'
 import { blockBar, dotRule } from '../hooks/chart-rows'
+import { seriesColor } from '../hooks/svg-chart-kit'
+import rosePine from '../hooks/themes/rose-pine'
 
 const NAMES = ['tokyo-night', 'dracula', 'nord']
 
@@ -734,6 +736,15 @@ test('a packet field too narrow for its name is named in full under the art', as
 
   expect(text).toContain('8 URG')
   expect(text).toContain('9 ACK')
+})
+
+test('series colours skip a colour the skin gives two slots', async () => {
+  const palette = rosePine.palette
+  const colors = [0, 1, 2, 3].map(i => seriesColor(palette, i))
+
+  expect(palette.read).toBe(palette.ok)
+  expect(new Set(colors).size).toBe(4)
+  expect(colors[2]).toBe(palette.warn.toLowerCase())
 })
 
 test('a block link with no straight run turns one corner instead of being listed', async () => {

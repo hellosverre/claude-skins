@@ -3,7 +3,7 @@ import type { Flow, FlowEdge, Pie, XyChart } from './mermaid'
 import { cutCell, widthOf } from './markdown'
 import type { Art, Tone } from './mermaid-art'
 import type { Look } from './rows'
-import type { Slot } from './skin'
+import { seriesColor as paletteSeries } from './svg-chart-kit'
 
 // A Mermaid fence drawn in terminal cells: flowcharts as boxes rank by rank with the
 // links between them spelled out, bar, line and pie charts as rows of block bars.
@@ -11,12 +11,11 @@ import type { Slot } from './skin'
 const SHAPE_SLOT = { box: 'user', round: 'read', diamond: 'warn' } as const
 // The border tells the shapes apart where a skin's colours are close.
 const SHAPE_BORDER = { box: 'single', round: 'round', diamond: 'double' } as const
-const SERIES: readonly Slot[] = ['user', 'read', 'ok', 'warn', 'web', 'mcp', 'search', 'err']
 const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉']
 const LABEL_MAX = 24
 const EDGE_LABEL_MAX = 16
 
-const seriesColor = (look: Look, i: number): string => look.skin.palette[SERIES[i % SERIES.length] ?? 'user']
+const seriesColor = (look: Look, i: number): string => paletteSeries(look.skin.palette, i)
 
 // A bar `cells` wide at most, `share` of it filled, to the eighth of a cell.
 export function blockBar(share: number, cells: number): string {
