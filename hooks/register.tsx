@@ -313,7 +313,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | shell | icons]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -708,7 +708,7 @@ reply width: ${lastColumns} columns`
     const active = await activeSkin($)
     const isHeadless = e.surfaces.length === 0 || e.traits.includes('bare') || e.traits.includes('print')
 
-    if (active === null || !active.prefs.charts || isHeadless) {
+    if (active === null || !active.prefs.charts || !active.prefs.hints || isHeadless) {
       return result
     }
 

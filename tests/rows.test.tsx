@@ -483,7 +483,7 @@ test('on the desktop an edit is a diff card and a shell command a terminal card'
   expect(await terminal.find({ type: 'Text', text: 'built' })).toBeDefined()
 })
 
-test('a code fence is a card on the desktop and stays markdown in the terminal', async ($, on) => {
+test('a code fence is a card on the desktop, highlighted rows in the terminal, markdown with highlight off', async ($, on) => {
   stubEngine(on)
 
   const reply = (surface: (typeof SURFACES)[number]) =>
@@ -495,7 +495,12 @@ test('a code fence is a card on the desktop and stays markdown in the terminal',
 
   const terminal = await $.ui.mount(reply('terminal'))
   expect(await terminal.find({ type: 'Svg' })).toBeUndefined()
-  expect(await terminal.find({ type: 'Markdown' })).toBeDefined()
+  expect(spanColor((await terminal.find({ type: 'Text', text: 'const a = 1' })) as Found, 'const')).toBe(noir.palette.web)
+  await terminal.unmount()
+
+  await runSkin($, 'highlight off')
+  const plain = await $.ui.mount(reply('terminal'))
+  expect(await plain.find({ type: 'Markdown' })).toBeDefined()
 })
 
 const FLOW = 'Steps:\n\n```mermaid\nflowchart TD\n  A[Plan] --> B[Build]\n  B -->|ship| C[Live]\n```'
@@ -641,6 +646,9 @@ test('while charts are on, the system prompt tells Claude it can answer with one
   expect((await compose()).sections.map(section => section.id)).toEqual(['base', 'skins:charts'])
   expect((await compose(['print'])).sections.map(section => section.id)).toEqual(['base'])
 
+  await runSkin($, 'hints off')
+  expect((await compose()).sections.map(section => section.id)).toEqual(['base'])
+  await runSkin($, 'hints on')
   await runSkin($, 'charts off')
   expect((await compose()).sections.map(section => section.id)).toEqual(['base'])
 })
@@ -1085,8 +1093,9 @@ test('a failed shell call shows its exit code, and stderr under its own label in
   expect(await record.find({ type: 'Text', text: 'stderr' })).toBeDefined()
   const err = (await record.find({ type: 'Text', text: 'error TS2322: Type string is not assignable to number' })) as Found
   expect(err?.props.color).toBe(palette.err)
+  // stdout is drawn in colour: the path in the path colour.
   const out = (await record.find({ type: 'Text', text: 'src/server.ts' })) as Found
-  expect(out?.props.color).toBe(palette.fg)
+  expect(spanColor(out, 'src/server.ts')).toBe(palette.read)
   await record.unmount()
 
   // The error text Claude Code hands back in place of the record names the exit code.
