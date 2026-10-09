@@ -1,7 +1,7 @@
 {
   "name": "skins",
-  "version": "0.2.0",
-  "description": "Skins for Claude Code: tool rows with icons, diff, table and Mermaid chart cards, a usage band and fifteen themes. /skin swaps them live.",
+  "version": "0.3.0",
+  "description": "Skins for Claude Code: tool rows with icons, diff, table, math and Mermaid chart cards, a usage band and fifteen themes. /skin swaps them live.",
   "author": { "name": "hellosverre", "url": "https://github.com/hellosverre" },
   "license": "MIT",
   "keywords": ["claude-code-mods", "claude-mods", "function-hooks", "theme", "skin"],
