@@ -66,7 +66,7 @@ const runSkin = ($: Engine, args: string) =>
 
 // The engine's own answers, so a hook can mount without a session. A test answering
 // the environment or the store itself leaves them out.
-function stubEngine(on: On, own: { env?: boolean; store?: boolean } = {}) {
+function stubEngine(on: On, own: { env?: boolean; store?: boolean; toast?: boolean } = {}) {
   mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   if (!own.env) {
@@ -76,7 +76,9 @@ function stubEngine(on: On, own: { env?: boolean; store?: boolean } = {}) {
     on('store.get', () => ({ value: undefined }))
     on('store.set', () => ({ value: undefined }))
   }
-  on('ui.toast', () => ({ value: undefined }))
+  if (!own.toast) {
+    on('ui.toast', () => ({ value: undefined }))
+  }
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 18 }] } }))
   // The dialog must hold Claude Code's own drawing, which a real engine hands back by reference.
@@ -651,4 +653,33 @@ test('quiet output folds a read-only call to its row, a failure to its error lin
   // A call that might write keeps its output.
   const loud = await $.ui.mount(result(q2, 'Bash', { stdout: 'built', stderr: '', interrupted: false }))
   expect(await loud.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
+test('/skin copy copies the last reply and says so, or says there is nothing yet', async ($, on) => {
+  stubEngine(on, { toast: true })
+  const copied: string[] = []
+  const toasts: string[] = []
+  on('ui.copy', ($, e) => {
+    copied.push(e.text)
+    return { value: { isCopied: true } }
+  })
+  on('ui.toast', ($, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+
+  const reply = 'Run:\n\n```bash\npnpm build\n```'
+  const turn = { durationMs: 1000, isAborted: false, reason: 'answer' } as const
+
+  await runSkin($, 'copy')
+  await $.turn.complete({ ...turn, turnId: 't1', answer: reply })
+  // A subagent's answer is not the reply on screen.
+  await $.turn.complete({ ...turn, turnId: 't2', answer: 'subagent notes', agentId: 'a1' })
+  await runSkin($, 'copy')
+  await runSkin($, 'copy code')
+
+  expect(toasts).toEqual(['Nothing to copy yet', 'Copied the reply', 'Copied the code'])
+  expect(copied).toEqual([reply, 'pnpm build'])
 })

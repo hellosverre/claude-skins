@@ -10,7 +10,7 @@ import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
 import { clipLines, diffstat, pick } from './format'
 import { drawsBlocks, hasBlocks } from './blocks'
-import { splitReply } from './markdown'
+import { copyOf, splitReply } from './markdown'
 import type { Segment } from './markdown'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
@@ -54,6 +54,8 @@ const quietAtom = atom({ plugin: 'skins', key: 'quiet' } as const, false)
 const usageAtom = atom({ plugin: 'skins', key: 'usage' } as const, { context: null, limits: [] } as UsageSnap)
 const compactingAtom = atom({ plugin: 'skins', key: 'compacting' } as const, false)
 const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
+// The main loop's last answer, for `/skin copy`.
+const lastReplyAtom = atom({ plugin: 'skins', key: 'lastReply' } as const, '')
 
 const EDITS = new Set(['Edit', 'MultiEdit', 'Write'])
 
@@ -226,7 +228,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | icons]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -303,6 +305,10 @@ export const register: Register = on => {
       await update($, turnsAtom, turns =>
         Object.fromEntries([...Object.entries(turns), [String(e.durationMs), finished]].slice(-KEPT_TURNS)),
       )
+
+      if (e.answer.trim() !== '') {
+        await update($, lastReplyAtom, () => e.answer)
+      }
     }
 
     return next(e)
@@ -359,6 +365,19 @@ export const register: Register = on => {
     }
 
     const word = e.args.trim().toLowerCase()
+
+    if (word === 'copy' || word === 'copy code') {
+      const copied = copyOf(await read($, lastReplyAtom), word === 'copy code')
+
+      if ('message' in copied) {
+        $.ui.toast(copied.message)
+      } else {
+        const result = await $.ui.copy({ text: copied.text })
+        $.ui.toast(result.isCopied ? (word === 'copy' ? 'Copied the reply' : 'Copied the code') : 'Could not copy here')
+      }
+
+      return {}
+    }
 
     if (word === 'pin' || word === 'unpin' || word === 'share') {
       $.ui.toast(await runFolderCommand($, word))

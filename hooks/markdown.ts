@@ -208,3 +208,19 @@ export function padCell(text: string, width: number, align: Align): string {
 
   return cut + ' '.repeat(room)
 }
+
+// What `/skin copy` puts on the clipboard: the whole reply, or with `code` its last code
+// block; a message instead when there is nothing to copy.
+export function copyOf(reply: string, code: boolean): { text: string } | { message: string } {
+  if (reply.trim() === '') {
+    return { message: 'Nothing to copy yet' }
+  }
+
+  if (!code) {
+    return { text: reply }
+  }
+
+  const last = splitReply(reply).findLast((segment): segment is Code => segment.kind === 'code')
+
+  return last === undefined ? { message: 'No code block in the last reply' } : { text: last.code }
+}

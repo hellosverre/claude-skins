@@ -78,6 +78,7 @@ Set `SKINS_THEME=light` or `SKINS_THEME=dark` to choose yourself, for example wh
 - **Ask your agent.** The mod gives Claude a `design` tool and a short guide, so "make me a skin that
   feels like a sunset" builds one and applies it while you watch.
 - **`/skin <name>`**, `/skin list`, `/skin off`, and `/skin rail|tables|shimmer|band|clip|markdown|quiet on|off` for quick switches.
+- **`/skin copy`** puts Claude's last reply on the clipboard; **`/skin copy code`** just its last code block.
 - **`/skin pin`** gives this folder a look of its own: later changes here stay here. **`/skin unpin`**
   returns it to the default, and **`/skin share`** makes this folder's look the default for the rest.
   Made skins are shared by every folder.

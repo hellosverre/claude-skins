@@ -4,7 +4,7 @@ import { DEFAULT_PREFS, parsePrefs, runSkinCommand } from '../hooks/command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from '../hooks/custom'
 import { runDesign } from '../hooks/designer'
 import { clipLines, diffstat, formatDuration, formatMs, pick, shortenPath } from '../hooks/format'
-import { columnWidths, cutCell, padCell, splitReply, widthOf } from '../hooks/markdown'
+import { columnWidths, copyOf, cutCell, padCell, splitReply, widthOf } from '../hooks/markdown'
 import { codeSvg, tokenize } from '../hooks/svg-code'
 import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
@@ -451,4 +451,13 @@ test('quiet output covers reads, searches and read-only shell calls, and finds t
   expect(errorLine({ stdout: 'Exit code 128', stderr: 'warning: x\nfatal: not a git repository\n' })).toBe('fatal: not a git repository')
   expect(errorLine({ stdout: '', stderr: '' })).toBe('Failed')
   expect(errorLine('one\ntwo\n')).toBe('two')
+})
+
+test('/skin copy takes the whole reply, or with code its last code block', async () => {
+  const reply = 'Try:\n\n```ts\nconst a = 1\n```\n\nor:\n\n```bash\npnpm build\n```'
+
+  expect(copyOf(reply, false)).toEqual({ text: reply })
+  expect(copyOf(reply, true)).toEqual({ text: 'pnpm build' })
+  expect(copyOf('No code here.', true)).toEqual({ message: 'No code block in the last reply' })
+  expect(copyOf('  \n', false)).toEqual({ message: 'Nothing to copy yet' })
 })

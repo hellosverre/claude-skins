@@ -64,6 +64,7 @@ declare module 'claude-code' {
       quiet: StateFamily<boolean>
       compacting: boolean
       pinned: boolean
+      lastReply: string
     }
   }
 }
