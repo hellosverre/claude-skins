@@ -9,6 +9,7 @@ export const DEFAULT_PREFS: Prefs = {
   band: true,
   clipOutput: false,
   markdown: true,
+  quiet: false,
 }
 
 // The on/off settings, by the word /skin and the settings pane use for each.
@@ -19,6 +20,7 @@ export const TOGGLES = {
   band: 'band',
   clip: 'clipOutput',
   markdown: 'markdown',
+  quiet: 'quiet',
 } as const satisfies Record<string, keyof Prefs>
 
 export type ToggleWord = keyof typeof TOGGLES
@@ -50,6 +52,7 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
     band: flagOr(saved.band, DEFAULT_PREFS.band),
     clipOutput: flagOr(saved.clipOutput, DEFAULT_PREFS.clipOutput),
     markdown: flagOr(saved.markdown, DEFAULT_PREFS.markdown),
+    quiet: flagOr(saved.quiet, DEFAULT_PREFS.quiet),
   }
 }
 
@@ -71,6 +74,7 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
       `band ${onOff(current.band)}`,
       `clip ${onOff(current.clipOutput)}`,
       `markdown ${onOff(current.markdown)}`,
+      `quiet ${onOff(current.quiet)}`,
     ].join(' · '),
   ].join('\n')
 

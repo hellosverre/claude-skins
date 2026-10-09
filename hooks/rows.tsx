@@ -174,7 +174,7 @@ function iconRow(look: Look, Svg: SvgElement, kind: Kind, calls: readonly Call[]
   )
 }
 
-export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta: Meta) {
+export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta: Meta, label = toolLabel(call.tool)) {
   const { Text } = look.ui
   const { palette } = look.skin
 
@@ -182,7 +182,7 @@ export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta
     const line = (
       <Text wrap="truncate-end">
         <Text color={palette[kind]} bold>
-          {toolLabel(call.tool)}
+          {label}
         </Text>
         <Text color={call.isErrored ? palette.err : palette.muted}>{`  ${target}`}</Text>
       </Text>
@@ -194,12 +194,23 @@ export function toolRow(look: Look, call: Call, kind: Kind, target: string, meta
   const main = (
     <Text wrap="truncate-end">
       {node(look, [call])}
-      <Text color={palette[kind]}>{toolLabel(call.tool)}</Text>
+      <Text color={palette[kind]}>{label}</Text>
       <Text color={call.isErrored ? palette.err : palette.muted}>{`  ${target}`}</Text>
     </Text>
   )
 
   return stack(look, withMeta(look, main, meta))
+}
+
+// A quiet call's result: nothing when it worked, the one line that says why when it failed.
+export function quietResult(look: Look, failure: string | null) {
+  const { Box, Text } = look.ui
+
+  return failure === null ? (
+    <Box />
+  ) : (
+    <Text color={look.skin.palette.err} wrap="truncate-end">{`${look.prefs.icons === 'ascii' ? 'x' : '✖'} ${failure}`}</Text>
+  )
 }
 
 // A run of reads and searches on one node: `●─ Read 3 · Search 2`.

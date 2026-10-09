@@ -15,6 +15,7 @@ import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/fold
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
 import { SKINS } from '../hooks/themes'
 import { inlineRuns, splitBlocks } from '../hooks/blocks'
+import { errorLine, isQuiet, isReadOnlyShell, segmentsOf } from '../hooks/quiet'
 import tokyoNight from '../hooks/themes/tokyo-night'
 
 const NAMES = ['tokyo-night', 'dracula', 'nord']
@@ -377,4 +378,77 @@ test('inline runs pick out code, emphasis, numbers, versions, paths and duration
   // Words with digits and snake_case stay plain.
   expect(styled('utf8 e2e my_var_name and/or')).toEqual([])
   expect(styled('*quiet* and ~~gone~~')).toEqual(['italic:quiet', 'strike:gone'])
+})
+
+test('quiet output splits a command on its separators and leaves quoted ones alone', () => {
+  expect(segmentsOf('git status && ls -la | head; echo "a; b && c"')).toEqual(['git status', 'ls -la', 'head', 'echo "a; b && c"'])
+  expect(segmentsOf("grep 'x|y' file")).toEqual(["grep 'x|y' file"])
+  expect(segmentsOf('echo "never closed')).toBeNull()
+})
+
+test('quiet output only folds a command it is sure only reads', () => {
+  const reads = [
+    'git status',
+    'git -C ../repo --no-pager log --oneline -5',
+    'git diff HEAD~1 -- hooks/ | head -40',
+    'rg -n "TODO|FIXME" hooks 2>/dev/null',
+    'ls -la && cat package.json',
+    'find . -name "*.ts" -not -path "./node_modules/*"',
+    'sed -n 10,40p hooks/rows.tsx',
+    'gh pr view 12 --json title',
+    'grep -c ">" notes.md',
+    'git branch --show-current',
+  ]
+  const writes = [
+    'echo hi > out.txt',
+    'cat a >> b',
+    'ls $(pwd)',
+    'ls `pwd`',
+    'cat <<EOF\nx\nEOF',
+    'sed -i s/a/b/ file',
+    'sed -n -e 1p -e "w out" file',
+    'sed -n 1p -i file',
+    'find . -name "*.tmp" -delete',
+    'find . -exec rm {} \;',
+    'git checkout main',
+    'git branch -D old',
+    'git stash',
+    'gh pr merge 12',
+    'npm test',
+    'rm -rf dist',
+    'FOO=1 ls',
+    'ls && rm a',
+    'sort -o out.txt in.txt',
+    'diff <(ls a) <(ls b)',
+    'echo "unclosed',
+    '',
+  ]
+
+  for (const command of reads) {
+    expect([command, isReadOnlyShell(command)]).toEqual([command, true])
+  }
+
+  for (const command of writes) {
+    expect([command, isReadOnlyShell(command)]).toEqual([command, false])
+  }
+
+  expect(isReadOnlyShell('Get-Content a.txt | Select-String foo', 'powershell')).toBe(true)
+  expect(isReadOnlyShell('Get-ChildItem | Where-Object { $_.Length -gt 0 }', 'powershell')).toBe(false)
+  expect(isReadOnlyShell('Remove-Item a.txt', 'powershell')).toBe(false)
+  expect(isReadOnlyShell('git status 2>$null', 'powershell')).toBe(true)
+})
+
+test('quiet output covers reads, searches and read-only shell calls, and finds the failing line', () => {
+  expect(isQuiet('Read', { file_path: '/a' })).toBe(true)
+  expect(isQuiet('Grep', { pattern: 'x' })).toBe(true)
+  expect(isQuiet('Bash', { command: 'git log -3' })).toBe(true)
+  expect(isQuiet('Bash', { command: 'pnpm build' })).toBe(false)
+  expect(isQuiet('PowerShell', { command: 'Get-Content a' })).toBe(true)
+  expect(isQuiet('Edit', { file_path: '/a' })).toBe(false)
+  expect(isQuiet('WebFetch', { url: 'https://a' })).toBe(false)
+
+  expect(errorLine('<tool_use_error>File does not exist.</tool_use_error>')).toBe('File does not exist.')
+  expect(errorLine({ stdout: 'Exit code 128', stderr: 'warning: x\nfatal: not a git repository\n' })).toBe('fatal: not a git repository')
+  expect(errorLine({ stdout: '', stderr: '' })).toBe('Failed')
+  expect(errorLine('one\ntwo\n')).toBe('two')
 })

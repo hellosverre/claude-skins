@@ -612,3 +612,43 @@ test('/skin pin keeps a look to this folder, /skin unpin returns to the default'
   expect(store.folders).toEqual({})
   expect((store.prefs as { skin: string }).skin).toBe('dracula')
 })
+
+test('quiet output folds a read-only call to its row, a failure to its error line', async ($, on) => {
+  stubEngine(on)
+  // The kit gives each call its own id; the engine's answer reads it back.
+  const ids: string[] = []
+  on('tool.call', ($, e) => {
+    ids.push(e.tool_use_id)
+    return { result: { stdout: 'On branch main', stderr: '', interrupted: false } }
+  })
+
+  const result = (id: string, tool: string, output: unknown, isErrored = false) =>
+    ({ ...SITE, surface: 'terminal', component: 'ToolResult', requestId: id, props: { tool_use_id: id, tool, output, isErrored } }) as const
+
+  await $.tool.call({ tool: 'Bash', command: 'git status' })
+  await $.tool.call({ tool: 'Bash', command: 'pnpm build' })
+  const [q1 = '', q2 = ''] = ids
+
+  // Off by default: a read-only call keeps its output.
+  const before = await $.ui.mount(result(q1, 'Bash', { stdout: 'On branch main', stderr: '', interrupted: false }))
+  expect(await before.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  await before.unmount()
+
+  await runSkin($, 'quiet on')
+
+  const grep = await $.ui.mount(toolUse(call('Grep', { pattern: 'TODO' })))
+  expect(await grep.find({ type: 'Text', text: /Searched/ })).toBeDefined()
+  await grep.unmount()
+
+  const quiet = await $.ui.mount(result(q1, 'Bash', { stdout: 'On branch main', stderr: '', interrupted: false }))
+  expect(await quiet.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+  await quiet.unmount()
+
+  const failed = await $.ui.mount(result(q1, 'Bash', { stdout: '', stderr: 'fatal: not a git repository', interrupted: false }, true))
+  expect(await failed.find({ type: 'Text', text: '✖ fatal: not a git repository' })).toBeDefined()
+  await failed.unmount()
+
+  // A call that might write keeps its output.
+  const loud = await $.ui.mount(result(q2, 'Bash', { stdout: 'built', stderr: '', interrupted: false }))
+  expect(await loud.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})

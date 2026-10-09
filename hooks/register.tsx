@@ -12,7 +12,7 @@ import { clipLines, diffstat, pick } from './format'
 import { drawsBlocks, hasBlocks } from './blocks'
 import { splitReply } from './markdown'
 import type { Segment } from './markdown'
-import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, replyRows, spinnerRow, toolRow } from './rows'
+import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
 import { settingsPane } from './settings'
@@ -23,6 +23,7 @@ import { shellOutputOf } from './svg-terminal'
 import { limitLabel, metersOf } from './svg-usage'
 import { shortenPath } from './format'
 import { kindOf, summarize } from './tools'
+import { errorLine, isQuiet, quietLabel } from './quiet'
 
 const SETTINGS = 'skins-settings'
 const GALLERY = 'skins-gallery'
@@ -48,6 +49,8 @@ const durationAtom = atom({ plugin: 'skins', key: 'duration' } as const, -1)
 const editingAtom = atom({ plugin: 'skins', key: 'editing' } as const, 'user' as SkinSlot)
 const lightAtom = atom({ plugin: 'skins', key: 'isLight' } as const, false)
 const imagesAtom = atom({ plugin: 'skins', key: 'images' } as const, false)
+// Whether a call only looked, so quiet output folds its result away.
+const quietAtom = atom({ plugin: 'skins', key: 'quiet' } as const, false)
 const usageAtom = atom({ plugin: 'skins', key: 'usage' } as const, { context: null, limits: [] } as UsageSnap)
 const compactingAtom = atom({ plugin: 'skins', key: 'compacting' } as const, false)
 const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
@@ -223,7 +226,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | icons]',
+      argumentHint: '[gallery | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -312,6 +315,11 @@ export const register: Register = on => {
     const ms = (await $.clock.now()) - startedAt
 
     await update($, memberOf(durationAtom, { requestId: e.tool_use_id }), () => ms)
+
+    // The call's arguments ride on the event itself (`e.command` for Bash).
+    if (isQuiet(e.tool, e)) {
+      await update($, memberOf(quietAtom, { requestId: e.tool_use_id }), () => true)
+    }
 
     if (e.agentId === undefined && e.tool !== DESIGN && ran.deny === undefined) {
       const diff = diffstat(ran.result)
@@ -438,10 +446,15 @@ reply width: ${lastColumns} columns`
     const diff = diffstat(e.props.output)
     const target = summarize(e.props.tool, e.props.input, await $.session.cwd())
 
-    return toolRow(lookOf($.ui.resolve(e), active, e.surface), e.props, kind, target, {
+    const meta = {
       ...(ms >= 0 && !e.props.isRunning ? { ms } : {}),
       ...(diff === null ? {} : diff),
-    })
+    }
+    const look = lookOf($.ui.resolve(e), active, e.surface)
+
+    return active.prefs.quiet && isQuiet(e.props.tool, e.props.input)
+      ? toolRow(look, e.props, kind, target, meta, quietLabel(e.props.tool))
+      : toolRow(look, e.props, kind, target, meta)
   })
 
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
@@ -462,6 +475,11 @@ reply width: ${lastColumns} columns`
     }
     const look = active === null ? undefined : lookOf($.ui.resolve(e), active, e.surface, copy)
     const columns = e.viewport?.columns ?? 100
+
+    // A call that only looked folds away; a failure keeps the line that says why.
+    if (look !== undefined && look.prefs.quiet && (await read($, memberOf(quietAtom, e)))) {
+      return quietResult(look, e.props.isErrored ? errorLine(e.props.output) : null)
+    }
 
     // The desktop gets cards: a diff for an edit, a terminal for a shell command.
     if (look?.svg !== undefined && EDITS.has(e.props.tool) && !e.props.isErrored) {

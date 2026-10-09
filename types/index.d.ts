@@ -27,6 +27,7 @@ export type Prefs = {
   band: boolean
   clipOutput: boolean
   markdown: boolean
+  quiet: boolean
 }
 
 // A skin someone made in the settings pane or through their agent: a built-in skin
@@ -60,6 +61,7 @@ declare module 'claude-code' {
       usage: UsageSnap
       isLight: boolean
       images: StateFamily<boolean>
+      quiet: StateFamily<boolean>
       compacting: boolean
       pinned: boolean
     }
