@@ -395,10 +395,8 @@ export function seriesName(chart: XyChart, i: number): string {
 // What reaches the model: one short paragraph, sent only while charts are on.
 export const CHART_HINT = [
   '# Charts',
-  'This transcript draws ```mermaid fences as pictures. Supported: `flowchart TD|LR` (nodes A[box], A(round), A{decision};',
-  'edges -->, -.->, ==>, with labels -->|yes|), `xychart-beta` (title "…", x-axis [a, b], y-axis "unit" 0 --> 100,',
-  'bar [..], line [..]), `pie` (title …, "label" : value), `gantt`, `timeline`, `journey`, `kanban`, `mindmap`,',
-  '`quadrantChart`, `radar-beta`, `sankey-beta`, `gitGraph`, `treemap-beta`, `packet-beta`, `block-beta`, `architecture-beta` and `C4Context`/`C4Container`. No subgraphs or styling; at most 40 nodes.',
-  'In the terminal `sequenceDiagram`, `stateDiagram-v2`, `classDiagram` and `erDiagram` draw too.',
-  'When a process, a schedule, a comparison of numbers or a breakdown reads better as a picture than as prose or a table, draw one.',
+  'Fenced ```mermaid draws as a picture here: flowchart TD|LR, xychart-beta (bar/line), pie, gantt, timeline, journey,',
+  'kanban, mindmap, quadrantChart, radar-beta, sankey-beta, gitGraph, treemap-beta, packet-beta, block-beta,',
+  'architecture-beta, C4Context; on the terminal also sequence, state, class and ER diagrams.',
+  'No subgraphs or styling, at most 40 nodes. Draw one when a process, schedule, numeric comparison or breakdown reads better as a picture.',
 ].join(' ')

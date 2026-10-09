@@ -1,3 +1,4 @@
+import { outputLine } from './code-rows'
 import { copyButton } from './rows'
 import type { Look } from './rows'
 import { foldLines, linesOf, shellStatus } from './shell'
@@ -19,6 +20,8 @@ export function shellRows(look: Look, command: string, result: ShellResult, isEr
   const row = (line: Folded<ShellLine>) =>
     'fold' in line ? (
       <Text color={palette.muted}>{`… ${line.fold} lines hidden`}</Text>
+    ) : look.prefs.highlight && !line.isErr && line.text !== '' ? (
+      outputLine(look, line.text)
     ) : (
       <Text color={line.isErr ? palette.err : palette.fg}>{line.text === '' ? ' ' : line.text}</Text>
     )

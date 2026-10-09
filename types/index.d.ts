@@ -36,6 +36,10 @@ export type Prefs = {
   commands: boolean
   // Shell output as a card: the command, its exit status, stderr apart, long output folded.
   shell: boolean
+  // Fenced code on the terminal and shell output in the skin's colours.
+  highlight: boolean
+  // The model-only note that charts and diagrams draw here.
+  hints: boolean
   // While /skin calm is on, the parts it changed as they were before it, for calm off to
   // put back; null while it is off.
   calm: CalmSnapshot | null

@@ -1,4 +1,5 @@
 import type { Palette } from './skin'
+import { outputTokens, roleColors } from './highlight'
 import { CONTROL_SLOT, escape, HEADER_MID, fitText, MONO, pill, riseDelay, strokeIcon, svgCard } from './svg-kit'
 
 // A shell command's output as a terminal card: a status pill, the output in mono with
@@ -51,7 +52,8 @@ export function outputLines(output: ShellOutput): Line[] {
 }
 
 // `hasControl` leaves the header's right corner free for a Copy button laid over it.
-export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Palette, width: number, hasControl = false): { source: string; width: number; height: number; alt: string } {
+// `colour` picks out paths, numbers and verdicts in stdout with the skin's colours.
+export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Palette, width: number, hasControl = false, colour = false): { source: string; width: number; height: number; alt: string } {
   const lines = outputLines(output)
   const status = output.interrupted
     ? { text: 'interrupted', color: palette.warn }
@@ -69,8 +71,15 @@ export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Pa
     }
 
     const color = 'isNote' in line ? palette.muted : line.isErr ? palette.err : palette.fg
+    const text = fitText(line.text, width - 40, true, CODE)
+    const body =
+      colour && !line.isErr && !('isNote' in line)
+        ? outputTokens(text)
+            .map(token => `<tspan style="fill:${roleColors(palette)[token.role]}">${escape(token.text)}</tspan>`)
+            .join('')
+        : escape(text)
 
-    return `<g class="rise" ${riseDelay(i, 22)}><text x="20" y="${top + 14}" font-family="${MONO}" font-size="${CODE}" style="fill:${color}" xml:space="preserve">${escape(fitText(line.text, width - 40, true, CODE))}</text></g>`
+    return `<g class="rise" ${riseDelay(i, 22)}><text x="20" y="${top + 14}" font-family="${MONO}" font-size="${CODE}" style="fill:${color}" xml:space="preserve">${body}</text></g>`
   })
 
   const height = HEADER_H + 6 + Math.max(1, lines.length) * LINE_H + 10

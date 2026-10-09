@@ -16,6 +16,7 @@ import {
   usageBand,
 } from './rows'
 import type { Look } from './rows'
+import { codeRows } from './code-rows'
 import { shellRows } from './shell-rows'
 
 // Every element the skin draws, numbered, from the same builders the transcript uses, so
@@ -87,7 +88,7 @@ export function galleryPane(look: Look, columns: number) {
             terminalCard(look, svg, { stdout: '', stderr: 'error TS2322: Type string is not assignable to number', interrupted: false }, true, width),
           )}
       {svg === undefined
-        ? section('Code block card', <Text color={palette.muted}>Desktop only; the terminal keeps Claude Code's markdown.</Text>)
+        ? section('Code block, highlighted', codeRows(look, 'ts', CODE))
         : section('Code block card', codeCard(look, 'ts', CODE, svg, width))}
       {section('Table', replyRows(look, [TABLE], width, svg))}
       {svg === undefined

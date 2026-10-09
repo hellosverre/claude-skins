@@ -23,6 +23,8 @@ import { tableSvg } from './svg-table'
 import { terminalSvg } from './svg-terminal'
 import type { ShellOutput } from './svg-terminal'
 import { usageLine, usageSvg } from './svg-usage'
+import { codeRows } from './code-rows'
+import { languageOf } from './highlight'
 import type { Meter } from './svg-usage'
 import { kindOf, toolLabel } from './tools'
 import { inlineMath, mathArt, parseTex } from './math'
@@ -481,6 +483,11 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
             )
           }
 
+          // The terminal highlights the languages it knows in the skin's colours.
+          if (look.surface === 'terminal' && look.prefs.highlight && languageOf(segment.lang) !== undefined) {
+            return codeRows(look, segment.lang, segment.code, copyButton(look, `copy-${i}`, segment.code))
+          }
+
           return Svg === undefined ? (
             <Box flexDirection="column">
               <Markdown text={segment.raw} />
@@ -603,7 +610,7 @@ export function terminalCard(look: Look, Svg: SvgElement, output: ShellOutput, i
   const text = [output.stdout, output.stderr].filter(part => part.trim() !== '').join('\n')
   const withCopy = text === '' ? { ...look, copy: undefined } : look
 
-  return cardWithCopy(withCopy, Svg, terminalSvg(output, isErrored, look.skin.palette, cardWidth(columns), withCopy.copy !== undefined), 'copy-output', text)
+  return cardWithCopy(withCopy, Svg, terminalSvg(output, isErrored, look.skin.palette, cardWidth(columns), withCopy.copy !== undefined, look.prefs.highlight), 'copy-output', text)
 }
 
 // From this full, the band suggests compacting and makes it the main action.

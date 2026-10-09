@@ -14,6 +14,8 @@ export const DEFAULT_PREFS: Prefs = {
   math: true,
   commands: true,
   shell: true,
+  highlight: true,
+  hints: true,
   calm: null,
 }
 
@@ -30,6 +32,8 @@ export const TOGGLES = {
   math: 'math',
   commands: 'commands',
   shell: 'shell',
+  highlight: 'highlight',
+  hints: 'hints',
 } as const satisfies Record<string, keyof Prefs>
 
 export type ToggleWord = keyof typeof TOGGLES
@@ -90,6 +94,8 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
     math: flagOr(saved.math, DEFAULT_PREFS.math),
     commands: flagOr(saved.commands, DEFAULT_PREFS.commands),
     shell: flagOr(saved.shell, DEFAULT_PREFS.shell),
+    highlight: flagOr(saved.highlight, DEFAULT_PREFS.highlight),
+    hints: flagOr(saved.hints, DEFAULT_PREFS.hints),
     calm: calmOf(saved.calm),
   }
 }
@@ -130,6 +136,8 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
       `math ${onOff(current.math)}`,
       `commands ${onOff(current.commands)}`,
       `shell ${onOff(current.shell)}`,
+      `highlight ${onOff(current.highlight)}`,
+      `hints ${onOff(current.hints)}`,
       `calm ${onOff(current.calm !== null)}`,
     ].join(' · '),
   ].join('\n')
