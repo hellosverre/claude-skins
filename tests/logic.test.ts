@@ -18,7 +18,7 @@ import { inlineRuns, splitBlocks } from '../hooks/blocks'
 import { errorLine, isQuiet, isReadOnlyShell, segmentsOf } from '../hooks/quiet'
 import tokyoNight from '../hooks/themes/tokyo-night'
 import { chartHeading, formatPercent, niceStep, parseMermaid, seriesName } from '../hooks/mermaid'
-import type { Flow, Gantt, GitGraph, Journey, Kanban, Mindmap, Pie, Quadrant, Radar, Sankey, Timeline, XyChart } from '../hooks/mermaid'
+import type { Flow, Gantt, GitGraph, Journey, Kanban, Mindmap, Packet, Pie, Quadrant, Radar, Sankey, Timeline, Treemap, XyChart } from '../hooks/mermaid'
 import { chartSvg } from '../hooks/svg-chart'
 import { chartArt } from '../hooks/chart-art'
 import { blockBar, dotRule } from '../hooks/chart-rows'
@@ -692,6 +692,50 @@ test('a git graph tracks branches, merges and cherry-picks', async () => {
   expect(chartHeading(git)).toEqual({ kind: 'Git graph', count: '5 commits' })
 })
 
+test('a treemap nests by indent and sums each section from its leaves', async () => {
+  const treemap = parseMermaid([
+    '---',
+    'title: Spend',
+    '---',
+    'treemap-beta',
+    '"Compute"',
+    '    "EC2": 420',
+    '    "Lambda" :::hot',
+    '        "Edge": 30',
+    '        "Core": 10.5',
+    '"Network": 75',
+  ].join('\n')) as Treemap
+
+  expect(treemap.title).toBe('Spend')
+  expect(treemap.roots.map(root => [root.label, root.value])).toEqual([
+    ['Compute', 460.5],
+    ['Network', 75],
+  ])
+  expect(treemap.roots[0]?.children[1]?.children.map(leaf => leaf.label)).toEqual(['Edge', 'Core'])
+  expect(chartHeading(treemap)).toEqual({ kind: 'Treemap', count: '4 items' })
+})
+
+test('a packet reads ranges, single bits and +n fields end to end', async () => {
+  const packet = parseMermaid('packet-beta\n  title UDP\n  0-15: "Source Port"\n  16-31: "Destination Port"\n  32: "Flag"\n  +7: "Rest"') as Packet
+
+  expect(packet.title).toBe('UDP')
+  expect(packet.fields).toEqual([
+    { start: 0, end: 15, label: 'Source Port' },
+    { start: 16, end: 31, label: 'Destination Port' },
+    { start: 32, end: 32, label: 'Flag' },
+    { start: 33, end: 39, label: 'Rest' },
+  ])
+  expect(chartHeading(packet)).toEqual({ kind: 'Packet', count: '40 bits' })
+})
+
+test('a packet field too narrow for its name is named in full under the art', async () => {
+  const packet = parseMermaid('packet-beta\n  0-7: "Type"\n  8: "URG"\n  9: "ACK"\n  10-31: "Rest"') as Packet
+  const text = chartArt(packet, 100, false)?.rows.map(row => row.map(segment => segment.text).join('')).join('\n') ?? ''
+
+  expect(text).toContain('8 URG')
+  expect(text).toContain('9 ACK')
+})
+
 test('broken plans and shapes parse to nothing rather than half a chart; a score out of range clamps', async () => {
   expect(parseMermaid('gantt\n  title Empty')).toBeNull()
   expect(parseMermaid('gantt\n  dateFormat YYYY-MM-DD\n  Task :a1, after nowhere, 2d')).toBeNull()
@@ -700,18 +744,23 @@ test('broken plans and shapes parse to nothing rather than half a chart; a score
   expect(parseMermaid('sankey-beta\nA,B,lots')).toBeNull()
   expect(parseMermaid('gitGraph\n  commit\n  checkout nowhere')).toBeNull()
   expect(parseMermaid('quadrantChart\n  A: [1.5, 0.2]')).toBeNull()
+  expect(parseMermaid('treemap-beta\n"Leaf": 5\n    "Child": 2')).toBeNull()
+  expect(parseMermaid('treemap-beta\n"Empty"')).toBeNull()
+  expect(parseMermaid('packet-beta\n  0-7: "A"\n  10-15: "B"')).toBeNull()
 })
 
 const SAMPLES = [
   'gantt\n  dateFormat YYYY-MM-DD\n  Parser :p1, 2026-10-01, 4d\n  Cards :after p1, 3d',
   'timeline\n  2002 : LinkedIn\n  2004 : Facebook',
   'journey\n  section Work\n    Make tea: 5: Me\n    Do work: 1: Me',
-  'kanban\n  Todo\n    [Write docs]\n  Done\n    [Pie]',
+  "kanban\n  Todo\n    [Write docs]@{ assigned: 'sverre', priority: 'High' }\n  Done\n    [Pie]",
   'mindmap\n  root((Skins))\n    Charts\n    Themes',
   'quadrantChart\n  x-axis Low --> High\n  y-axis Cold --> Hot\n  A: [0.3, 0.6]',
   'radar-beta\n  axis a["Speed"], b["Power"], c["Range"]\n  curve x["Ship"]{3, 4, 5}',
   'sankey-beta\nFarm,Mill,120\nMill,Bread,80',
   'gitGraph\n  commit\n  branch dev\n  commit\n  checkout main\n  merge dev',
+  'treemap-beta\n"Compute"\n    "EC2": 420\n    "Lambda": 160\n"Storage"\n    "S3": 210\n"Network": 75',
+  'packet-beta\n  0-15: "Source Port"\n  16-31: "Destination Port"\n  32: "URG"\n  33: "ACK"\n  34-63: "Rest"',
 ]
 
 test('every new kind draws a card with a readable alt, and art that ascii mode keeps to ASCII', async () => {

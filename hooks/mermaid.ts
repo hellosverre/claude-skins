@@ -8,9 +8,12 @@ import { parseGantt, parseJourney, parseKanban, parseTimeline } from './mermaid-
 import type { Gantt, Journey, Kanban, Timeline } from './mermaid-plan'
 import { parseGitGraph, parseMindmap, parseQuadrant, parseRadar, parseSankey } from './mermaid-shape'
 import type { GitGraph, Mindmap, Quadrant, Radar, Sankey } from './mermaid-shape'
+import { parsePacket, parseTreemap } from './mermaid-data'
+import type { Packet, Treemap } from './mermaid-data'
 
 export type * from './mermaid-plan'
 export type * from './mermaid-shape'
+export type * from './mermaid-data'
 
 export type Shape = 'box' | 'round' | 'diamond'
 
@@ -38,7 +41,7 @@ export type Slice = { label: string; value: number }
 
 export type Pie = { kind: 'pie'; title: string; slices: Slice[] }
 
-export type Chart = Flow | XyChart | Pie | Gantt | Timeline | Journey | Kanban | Mindmap | Quadrant | Radar | Sankey | GitGraph
+export type Chart = Flow | XyChart | Pie | Gantt | Timeline | Journey | Kanban | Mindmap | Quadrant | Radar | Sankey | GitGraph | Treemap | Packet
 
 // Past these a picture stops being easier to read than the source.
 export const MAX_NODES = 40
@@ -65,6 +68,8 @@ const KINDS: readonly (readonly [RegExp, (body: readonly string[]) => Chart | nu
   [/^radar(-beta)?\b/, parseRadar],
   [/^sankey(-beta)?\b/, parseSankey],
   [/^gitGraph\b/, parseGitGraph],
+  [/^treemap(-beta)?\b/, parseTreemap],
+  [/^packet(-beta)?\b/, parsePacket],
 ]
 
 function parseKind(lines: readonly string[]): Chart | null {
@@ -344,6 +349,10 @@ export function chartHeading(chart: Chart): { kind: string; count: string } {
       return { kind: 'Sankey', count: plural(chart.links.length, 'flow') }
     case 'git':
       return { kind: 'Git graph', count: plural(chart.commits.length, 'commit') }
+    case 'treemap':
+      return { kind: 'Treemap', count: plural(chart.leaves, 'item') }
+    case 'packet':
+      return { kind: 'Packet', count: plural(chart.bits, 'bit') }
   }
 }
 
@@ -374,7 +383,7 @@ export const CHART_HINT = [
   'This transcript draws ```mermaid fences as pictures. Supported: `flowchart TD|LR` (nodes A[box], A(round), A{decision};',
   'edges -->, -.->, ==>, with labels -->|yes|), `xychart-beta` (title "…", x-axis [a, b], y-axis "unit" 0 --> 100,',
   'bar [..], line [..]), `pie` (title …, "label" : value), `gantt`, `timeline`, `journey`, `kanban`, `mindmap`,',
-  '`quadrantChart`, `radar-beta`, `sankey-beta` and `gitGraph`. No subgraphs or styling; at most 40 nodes.',
+  '`quadrantChart`, `radar-beta`, `sankey-beta`, `gitGraph`, `treemap-beta` and `packet-beta`. No subgraphs or styling; at most 40 nodes.',
   'In the terminal `sequenceDiagram`, `stateDiagram-v2`, `classDiagram` and `erDiagram` draw too.',
   'When a process, a schedule, a comparison of numbers or a breakdown reads better as a picture than as prose or a table, draw one.',
 ].join(' ')

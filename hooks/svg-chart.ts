@@ -1,10 +1,11 @@
 import { chartHeading, formatPercent, formatValue, niceStep, seriesName } from './mermaid'
-import type { Chart, Flow, FlowEdge, FlowNode, MindNode, Pie, Shape, XyChart } from './mermaid'
+import type { Chart, Flow, FlowEdge, FlowNode, MindNode, Pie, Shape, TreeNode, XyChart } from './mermaid'
 import type { Palette, Slot } from './skin'
 import { HEADER_H, PAD, seriesColor } from './svg-chart-kit'
 import type { Body } from './svg-chart-kit'
 import { ganttBody, journeyBody, kanbanBody, timelineBody } from './svg-chart-plan'
 import { gitBody, mindmapBody, quadrantBody, radarBody, sankeyBody } from './svg-chart-shape'
+import { packetBody, treemapBody } from './svg-chart-data'
 import { CONTROL_SLOT, escape, fitText, HEADER_MID, measure, riseDelay, svgCard } from './svg-kit'
 
 // A Mermaid fence drawn as a card in the same shell as code and tables: the kind and
@@ -71,12 +72,21 @@ function bodyOf(chart: Chart, palette: Palette, width: number): Body | null {
       return sankeyBody(chart, palette, width)
     case 'git':
       return gitBody(chart, palette, width)
+    case 'treemap':
+      return treemapBody(chart, palette, width)
+    case 'packet':
+      return packetBody(chart, palette, width)
   }
 }
 
 const titled = (kind: string, title: string): string => `${kind}${title === '' ? '' : `: ${title}`}`
 
 const mindLines = (node: MindNode, depth: number): string[] => [`${'  '.repeat(depth)}${node.label}`, ...node.children.flatMap(child => mindLines(child, depth + 1))]
+
+const treeLines = (node: TreeNode, depth: number): string[] => [
+  `${'  '.repeat(depth)}${node.label}: ${formatValue(node.value)}`,
+  ...node.children.flatMap(child => treeLines(child, depth + 1)),
+]
 
 function altOf(chart: Chart): string {
   const label = (flow: Flow, id: string) => flow.nodes.find(node => node.id === id)?.label ?? id
@@ -112,6 +122,10 @@ function altOf(chart: Chart): string {
       return [titled('Sankey', chart.title), ...chart.links.map(link => `${link.from} → ${link.to}: ${formatValue(link.value)}`)].join('\n')
     case 'git':
       return [titled('Git graph', chart.title), ...chart.commits.map(commit => `${commit.branch}: ${commit.shown || commit.id}${commit.tag === '' ? '' : ` [${commit.tag}]`}`)].join('\n')
+    case 'treemap':
+      return [titled('Treemap', chart.title), ...chart.roots.flatMap(root => treeLines(root, 0))].join('\n')
+    case 'packet':
+      return [titled('Packet', chart.title), ...chart.fields.map(field => `${field.start === field.end ? field.start : `${field.start}-${field.end}`}: ${field.label}`)].join('\n')
   }
 }
 

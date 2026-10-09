@@ -1,6 +1,7 @@
 import { blit, gridOf, padTo, runsOf, runsOfLines, seg, wrapTo, write, writeAll } from './art-canvas'
 import type { Grid, Segment } from './art-canvas'
 import { gitArt, mindmapArt, quadrantArt, radarArt, sankeyArt } from './chart-art-shape'
+import { packetArt, treemapArt } from './chart-art-data'
 import { cutCell, widthOf } from './markdown'
 import { chartHeading, formatPercent, formatValue } from './mermaid'
 import type { Chart, Gantt, Journey, Kanban, Pie, Timeline } from './mermaid'
@@ -11,9 +12,12 @@ import type { Art, Run, Tone } from './mermaid-art'
 // cannot fit `columns`, and the caller falls back to bars or to the code.
 
 export function chartArt(chart: Chart, columns: number, ascii: boolean): Art | null {
-  const rows = drawn(chart, columns - 2, ascii)
+  const drawnRows = drawn(chart, columns - 2, ascii)
+  // A label cut short ends in `…` and parts of a line are kept apart by `·`; plain ASCII
+  // spells them as a dot and a dash.
+  const rows = ascii ? drawnRows?.map(row => row.map(run => ({ ...run, text: run.text.replaceAll('…', '.').replaceAll('·', '-') }))) : drawnRows
 
-  return rows === null || rows.length === 0 ? null : { kind: chartHeading(chart).kind, title: chart.title, rows }
+  return rows === null || rows === undefined || rows.length === 0 ? null : { kind: chartHeading(chart).kind, title: chart.title, rows }
 }
 
 function drawn(chart: Chart, room: number, ascii: boolean): Run[][] | null {
@@ -38,6 +42,10 @@ function drawn(chart: Chart, room: number, ascii: boolean): Run[][] | null {
       return sankeyArt(chart, room, ascii)
     case 'git':
       return gitArt(chart, room, ascii)
+    case 'treemap':
+      return treemapArt(chart, room, ascii)
+    case 'packet':
+      return packetArt(chart, room, ascii)
     case 'flow':
     case 'xy':
       return null
