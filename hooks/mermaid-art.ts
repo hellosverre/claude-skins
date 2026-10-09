@@ -1,20 +1,26 @@
 import { renderMermaidAscii, seriesColors, setChartSize } from './vendor/mermaid-ascii.js'
 import type { AsciiTheme } from './vendor/mermaid-ascii.js'
 import { widthOf } from './markdown'
+import { frontmatterOf } from './mermaid-lex'
+import type { Slot } from './skin'
 
 // A Mermaid fence laid out in two dimensions by beautiful-mermaid's terminal renderer,
 // then handed back as runs of text tagged with what they draw, so the skin can colour
 // them: each box its own colour, the links quiet, the arrowheads and labels plain.
 
-export type Tone = 'fg' | 'muted' | 'title' | { box: number } | { series: number }
+// The same runs carry the charts this mod draws itself (chart-art.ts): those also name a
+// skin slot outright, and a background for half-block cells.
+export type Tone = 'fg' | 'muted' | 'title' | { box: number } | { series: number } | { slot: Slot }
 
 export interface Run {
   text: string
   tone: Tone | null
+  back?: Tone
 }
 
 export interface Art {
   kind: string
+  title?: string
   rows: Run[][]
 }
 
@@ -71,7 +77,7 @@ const cache = new Map<string, Art | null>()
 
 // What kind of diagram the renderer draws for `source`, or null for one it does not.
 export function artKind(source: string): string | null {
-  const header = source.trim().split(/\r?\n/, 1)[0]?.trim() ?? ''
+  const header = frontmatterOf(source).lines.find(line => line.trim() !== '' && !line.trim().startsWith('%%'))?.trim() ?? ''
 
   return KINDS.find(([pattern]) => pattern.test(header))?.[1] ?? null
 }
@@ -98,7 +104,9 @@ export function mermaidArt(source: string, columns: number, ascii: boolean): Art
 
 function drawArt(source: string, columns: number, ascii: boolean): Art | null {
   const kind = artKind(source)
-  const text = source.trim().replace(/\r\n?/g, '\n')
+  // The renderer reads no frontmatter; its title becomes the card's.
+  const { title, lines } = frontmatterOf(source)
+  const text = lines.join('\n').trim()
 
   if (kind === null || text.length > MAX_CHARS || text.split('\n').length > MAX_LINES) {
     return null
@@ -121,7 +129,7 @@ function drawArt(source: string, columns: number, ascii: boolean): Art | null {
     const grid = kind === 'Flowchart' || kind === 'State' ? reattach(drawn) : drawn
 
     if (grid.length <= MAX_ROWS && grid.every(row => widthOf(row.map(cell => cell.char).join('')) <= room)) {
-      return { kind, rows: paint(grid, kind) }
+      return { kind, title, rows: paint(grid, kind) }
     }
   }
 
@@ -355,7 +363,7 @@ function toneOf(cell: Cell, box: number | undefined, title: boolean): Tone | nul
   }
 }
 
-const sameTone = (a: Tone | null, b: Tone | null): boolean =>
+export const sameTone = (a: Tone | null | undefined, b: Tone | null | undefined): boolean =>
   a === b || (typeof a === 'object' && typeof b === 'object' && a !== null && b !== null && JSON.stringify(a) === JSON.stringify(b))
 
 const isBorder = (cell: Cell | undefined): boolean =>

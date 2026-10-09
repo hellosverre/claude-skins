@@ -1,5 +1,5 @@
 import { chartHeading, formatPercent, formatValue, seriesName } from './mermaid'
-import type { Chart, Flow, FlowEdge, Pie, XyChart } from './mermaid'
+import type { Flow, FlowEdge, Pie, XyChart } from './mermaid'
 import { cutCell, widthOf } from './markdown'
 import type { Art, Tone } from './mermaid-art'
 import type { Look } from './rows'
@@ -25,7 +25,7 @@ export function blockBar(share: number, cells: number): string {
   return '█'.repeat(Math.floor(eighths / 8)) + (EIGHTHS[eighths % 8] ?? '')
 }
 
-export function chartRows(look: Look, chart: Chart, maxWidth: number) {
+export function chartRows(look: Look, chart: Flow | XyChart | Pie, maxWidth: number) {
   const { Box, Text } = look.ui
   const { palette } = look.skin
   const { kind, count } = chartHeading(chart)
@@ -43,27 +43,35 @@ export function chartRows(look: Look, chart: Chart, maxWidth: number) {
   )
 }
 
-// A diagram laid out by the vendored renderer, under the same heading as ours.
+// A drawing in cells, the vendored renderer's or ours, under the same heading as the rest.
 export function artRows(look: Look, art: Art, count: string) {
   const { Box, Text } = look.ui
   const { palette } = look.skin
+  const title = art.title ?? ''
 
   const colorOf = (tone: Tone): string =>
     typeof tone === 'object'
-      ? seriesColor(look, 'box' in tone ? tone.box : tone.series)
+      ? 'slot' in tone ? palette[tone.slot] : seriesColor(look, 'box' in tone ? tone.box : tone.series)
       : tone === 'muted' ? palette.muted : palette.fg
 
   return (
     <Box flexDirection="column" marginY={1}>
       <Text color={palette.muted}>
         <Text bold>{art.kind.toUpperCase()}</Text>
+        {title === '' ? '' : <Text color={palette.fg} bold>{`  ${title}`}</Text>}
         {count === '' ? '' : `  ·  ${count}`}
       </Text>
       <Box flexDirection="column" marginTop={1}>
         {art.rows.map(row => (
           <Text>
-            {row.length === 0 ? ' ' : row.map(run => (run.tone === null ? run.text : (
-              <Text color={colorOf(run.tone)} bold={run.tone === 'title'}>{run.text}</Text>
+            {row.length === 0 ? ' ' : row.map(run => (run.tone === null && run.back === undefined ? run.text : (
+              <Text
+                color={run.tone === null ? undefined : colorOf(run.tone)}
+                backgroundColor={run.back === undefined ? undefined : colorOf(run.back)}
+                bold={run.tone === 'title'}
+              >
+                {run.text}
+              </Text>
             )))}
           </Text>
         ))}

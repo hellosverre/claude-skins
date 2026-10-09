@@ -6,6 +6,7 @@ import { columnWidths, cutCell } from './markdown'
 import type { Segment, Table } from './markdown'
 import { splitBlocks } from './blocks'
 import { artRows, chartRows } from './chart-rows'
+import { chartArt } from './chart-art'
 import { chartHeading, parseMermaid } from './mermaid'
 import { mermaidArt } from './mermaid-art'
 import type { Chart } from './mermaid'
@@ -403,10 +404,12 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
 
         if (segment.kind === 'code') {
           const chart = segment.lang === 'mermaid' && look.prefs.charts ? parseMermaid(segment.code) : null
-          // The terminal lays diagrams out in two dimensions; pies stay ours.
-          const art = Svg === undefined && segment.lang === 'mermaid' && look.prefs.charts && chart?.kind !== 'pie'
-            ? mermaidArt(segment.code, maxWidth, look.prefs.icons === 'ascii')
-            : null
+          const ascii = look.prefs.icons === 'ascii'
+          // The terminal lays diagrams out in two dimensions: the kinds we parse in our own
+          // drawings, flowcharts, xy charts and the kinds we do not parse in the vendored one.
+          const ours = Svg === undefined && chart !== null ? chartArt(chart, maxWidth, ascii) : null
+          const vendored = Svg === undefined && segment.lang === 'mermaid' && look.prefs.charts && (chart === null || chart.kind === 'flow' || chart.kind === 'xy')
+          const art = ours ?? (vendored ? mermaidArt(segment.code, maxWidth, ascii) : null)
 
           if (art !== null) {
             return (
@@ -417,14 +420,17 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
             )
           }
 
-          if (chart !== null) {
-            return Svg === undefined ? (
+          if (chart !== null && Svg !== undefined) {
+            return chartCard(look, chart, segment.code, Svg, maxWidth, `copy-${i}`)
+          }
+
+          // A terminal too narrow for a drawing falls back to rows, or to the code.
+          if (chart !== null && (chart.kind === 'flow' || chart.kind === 'xy' || chart.kind === 'pie')) {
+            return (
               <Box flexDirection="column">
                 {chartRows(look, chart, maxWidth)}
                 {copyRow(look, `copy-${i}`, segment.code)}
               </Box>
-            ) : (
-              chartCard(look, chart, segment.code, Svg, maxWidth, `copy-${i}`)
             )
           }
 
