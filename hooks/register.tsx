@@ -1,7 +1,7 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
-import type { CustomSkin, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
+import type { CustomSkin, Disclosure, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
 import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES, withCalm } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
 import { forTheme, gnomeDark, macDark, resolveLight, windowsDark } from './light'
@@ -9,6 +9,8 @@ import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
 import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
 import { clipLines, diffstat, pick } from './format'
+import { bodyOf, inputFields, isOpen } from './detail'
+import { disclosedRow, openedRows } from './detail-rows'
 import { drawsBlocks, hasBlocks } from './blocks'
 import { copyOf, isShell, splitReply } from './markdown'
 import type { Segment } from './markdown'
@@ -66,6 +68,10 @@ const commandAtom = atom({ plugin: 'skins', key: 'command' } as const, '')
 const usageAtom = atom({ plugin: 'skins', key: 'usage' } as const, { context: null, limits: [] } as UsageSnap)
 const compactingAtom = atom({ plugin: 'skins', key: 'compacting' } as const, false)
 const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
+// Whether each tool row is open, as the person left it; `auto` opens a failed call.
+const disclosureAtom = atom({ plugin: 'skins', key: 'disclosure' } as const, 'auto' as Disclosure)
+// Whether an opened row shows its answer whole, past the fold.
+const allAtom = atom({ plugin: 'skins', key: 'showAll' } as const, false)
 // The main loop's last answer, for `/skin copy`.
 const lastReplyAtom = atom({ plugin: 'skins', key: 'lastReply' } as const, '')
 
@@ -554,19 +560,48 @@ reply width: ${lastColumns} columns`
       return next(e)
     }
 
+    const cwd = await $.session.cwd()
     const ms = await read($, memberOf(durationAtom, e))
     const diff = diffstat(e.props.output)
-    const target = summarize(e.props.tool, e.props.input, await $.session.cwd())
+    const target = summarize(e.props.tool, e.props.input, cwd)
 
     const meta = {
       ...(ms >= 0 && !e.props.isRunning ? { ms } : {}),
       ...(diff === null ? {} : diff),
     }
-    const look = lookOf($.ui.resolve(e), active, e.surface)
+    const copy = (text: string) => {
+      void $.ui.copy({ text, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
+    }
+    const look = { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }
+    const row =
+      active.prefs.quiet && isQuiet(e.props.tool, e.props.input)
+        ? toolRow(look, e.props, kind, target, meta, quietLabel(e.props.tool))
+        : toolRow(look, e.props, kind, target, meta)
 
-    return active.prefs.quiet && isQuiet(e.props.tool, e.props.input)
-      ? toolRow(look, e.props, kind, target, meta, quietLabel(e.props.tool))
-      : toolRow(look, e.props, kind, target, meta)
+    // The chevron opens the row onto the call's input and its answer.
+    const disclosure = memberOf(disclosureAtom, e)
+    const open = isOpen(await read($, disclosure), e.props.isErrored)
+    const toggle = () => void update($, disclosure, () => (open ? 'closed' : 'open'))
+
+    if (!open) {
+      return disclosedRow(look, row, false, toggle)
+    }
+
+    const all = memberOf(allAtom, e)
+    const isAll = await read($, all)
+    const opened = await openedRows(look, {
+      fields: inputFields(e.props.tool, e.props.input, cwd),
+      body: bodyOf(e.props.tool, e.props.output, e.props.isErrored, e.props.isRunning, cwd),
+      command: commandOf(e.props.input),
+      isErrored: e.props.isErrored,
+      cwd,
+      columns: e.viewport?.columns ?? 100,
+      isAll,
+      toggleAll: () => void update($, all, () => !isAll),
+      stock: () => next(e),
+    })
+
+    return disclosedRow(look, row, true, toggle, opened)
   })
 
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
@@ -587,6 +622,19 @@ reply width: ${lastColumns} columns`
     }
     const look = active === null ? undefined : { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }
     const columns = e.viewport?.columns ?? 100
+    // An opened row draws the answer itself; one it cannot draw keeps Claude Code's here.
+    const isOpened =
+      active !== null &&
+      kindOf(e.props.tool) !== null &&
+      isOpen(await read($, memberOf(disclosureAtom, e)), e.props.isErrored) &&
+      bodyOf(e.props.tool, e.props.output, e.props.isErrored, false, '').kind !== 'stock'
+
+    if (isOpened) {
+      const { Box } = $.ui.resolve(e)
+
+      return <Box />
+    }
+
     // Calm never folds a failure away: it is drawn whole, past quiet and the clip.
     const isCalmFailure = look !== undefined && look.prefs.calm !== null && e.props.isErrored
 
@@ -628,7 +676,7 @@ reply width: ${lastColumns} columns`
       }
     }
 
-    if (!active?.prefs.clipOutput || isCalmFailure || e.props.tool !== 'Bash' || typeof output?.stdout !== 'string') {
+    if (!active?.prefs.clipOutput || isCalmFailure || !SHELLS.has(e.props.tool) || typeof output?.stdout !== 'string') {
       return next(e)
     }
 

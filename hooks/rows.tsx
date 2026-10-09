@@ -28,7 +28,7 @@ import { kindOf, toolLabel } from './tools'
 import { inlineMath, mathArt, parseTex } from './math'
 import { mathSvg } from './svg-math'
 
-export type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Markdown' | 'Button'>
+export type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Markdown' | 'Button' | 'Code'>
 
 // The vector element, on the surfaces that have one (the desktop app).
 export type SvgElement = ElementTable<'desktop'>['Svg']
