@@ -30,6 +30,10 @@ export type Prefs = {
   markdown: boolean
   quiet: boolean
   charts: boolean
+  // Display formulas as cards and inline TeX as Unicode.
+  math: boolean
+  // Tables and code in slash-command output drawn the way replies are.
+  commands: boolean
 }
 
 // A skin someone made in the settings pane or through their agent: a built-in skin

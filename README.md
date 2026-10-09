@@ -59,7 +59,7 @@ To keep it installed but go back to Claude Code's own drawing, run `/skin off`.
 | `/skin <name>` | Switch skin: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `rose-pine`, `nord`, `gruvbox`, `kanagawa`, `everforest`, `one-dark`, `solarized`, `night-owl`, `ayu`, `github`, `mono` |
 | `/skin list` | Every skin, yours included |
 | `/skin off` | Back to Claude Code's own drawing |
-| `/skin rail\|shimmer\|band\|clip\|markdown\|quiet\|charts on\|off` | Toggle one part |
+| `/skin rail\|shimmer\|band\|clip\|markdown\|quiet\|charts\|math\|commands on\|off` | Toggle one part |
 | `/skin copy` · `copy code` | Copy Claude's last reply, or just its last code block |
 | `/skin tables on\|text\|off` | `text` draws tables and code as selectable text on the desktop |
 | `/skin gallery` | Every element the skin draws, numbered, to point at |
@@ -108,6 +108,8 @@ Drawn by the mod's own card code (`scripts/previews.ts`), not screenshots.
 | Quiet output (off by default) | Reads, searches and read-only commands fold to one row; a failure keeps its error line | The same |
 | Tables | Card with header rule, zebra rows, colour swatches | Cell grid with a header band |
 | Charts | ` ```mermaid ` as a card: flowchart, xy, pie, gantt, timeline, journey, kanban, mindmap, quadrant, radar, sankey, gitGraph, treemap, packet, block, architecture, C4 | The same seventeen drawn in cells, ASCII with `/skin icons ascii` |
+| Math | `$$…$$`, `\[…\]` and ` ```math ` as a typeset card: fractions, roots, sums and integrals with limits, matrices, aligned lines; `$…$` inline turns into Unicode | Fractions and limits stacked in cells, inline `$…$` as Unicode |
+| Command output | `/cost`, `/context` and plugin output: tables, code and `key: value` runs as cards | The same as cell grids |
 | Alerts and task lists | `> [!NOTE]` as a titled box, `- [ ]` with ticks and a done count | The same |
 | Code blocks | Card with language, line numbers, highlighting; shell blocks keep the Run button | Claude Code's own markdown |
 | Spinner | Animated icon per phase | The skin's word with a band of light |

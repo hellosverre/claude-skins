@@ -114,6 +114,8 @@ export function settingsPane(look: Look, ui: PaneUi, model: SettingsModel, actio
         {toggle('markdown', 'm', prefs.markdown)}
         {toggle('quiet', 'q', prefs.quiet)}
         {toggle('charts', 'g', prefs.charts)}
+        {toggle('math', 'x', prefs.math)}
+        {toggle('commands', 'o', prefs.commands)}
         <Button key="icons" label={`icons ${prefs.icons}`} hotkey="i" plain onPress={() => actions.icons()} />
       </Box>
 

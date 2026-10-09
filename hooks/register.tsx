@@ -14,6 +14,8 @@ import { copyOf, isShell, splitReply } from './markdown'
 import type { Segment } from './markdown'
 import { CHART_HINT, parseMermaid } from './mermaid'
 import { artKind } from './mermaid-art'
+import { inlineMath } from './math'
+import { commandSegments } from './command-output'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
@@ -300,7 +302,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | copy | copy code | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | icons]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -651,19 +653,30 @@ reply width: ${lastColumns} columns`
     const blocks = prefs.markdown && (e.surface === 'terminal' || hasBlocks(text))
     // With cards off, a Mermaid fence the parser reads is still split out to draw.
     const charts = prefs.charts && /mermaid/i.test(text)
+    // Display formulas become cards, inline TeX Unicode.
+    const math = prefs.math && /\$|```math|\\\[|\\\(/.test(text)
 
-    if (!cards && !blocks && !charts) {
+    if (!cards && !blocks && !charts && !math) {
       return next(e)
     }
 
     const charted = (lang: string, code: string) =>
       lang === 'mermaid' && (parseMermaid(code) !== null || (e.surface === 'terminal' && artKind(code) !== null))
-    const segments: Segment[] = cards ? splitReply(text) : charts ? splitReply(text, { tables: false, fence: charted }) : [{ kind: 'text', text }]
+    const segments: Segment[] = cards
+      ? splitReply(text, { tables: true, fence: () => true, math })
+      : charts || math
+        ? splitReply(text, { tables: false, fence: (lang, code) => charts && charted(lang, code), math })
+        : [{ kind: 'text', text }]
     const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
     // Off the terminal a shell fence keeps the app's drawing, for its Run button; a reply
     // with nothing else to draw is left to the app whole.
     const kept = e.surface === 'terminal' ? segments : segments.filter(segment => !isShell(segment))
-    const drawn = kept.some(segment => segment.kind !== 'text' || (prefs.markdown && drawsBlocks(segment.text, e.surface)))
+    const drawn = kept.some(
+      segment =>
+        segment.kind !== 'text' ||
+        (prefs.markdown && drawsBlocks(segment.text, e.surface)) ||
+        (math && inlineMath(segment.text) !== segment.text),
+    )
 
     if (!fits || !drawn) {
       return next(e)
@@ -674,6 +687,31 @@ reply width: ${lastColumns} columns`
     const ui = $.ui.resolve(e)
     const svg = e.surface !== 'terminal' && active.prefs.tables === 'on' && 'Svg' in ui ? ui.Svg : undefined
     lastColumns = e.viewport?.columns
+    const copy = (copied: string) => {
+      void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
+    }
+
+    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
+  })
+
+  // A slash command's output (`/cost`, `/context`, a plugin's) drawn the way a reply is: its
+  // tables and code as cards, a run of `key: value` lines as a table. /skin's own rows are
+  // already the skin's.
+  on('ui.render', { component: 'CommandOutput' }, async ($, e, next) => {
+    const active = await activeSkin($)
+
+    if (active === null || !active.prefs.commands || active.prefs.tables === 'off' || e.props.isErrored || e.props.command === 'skin') {
+      return next(e)
+    }
+
+    const segments = e.props.text.length > MAX_MARKDOWN ? null : commandSegments(e.props.text, e.props.command)
+
+    if (segments === null) {
+      return next(e)
+    }
+
+    const ui = $.ui.resolve(e)
+    const svg = e.surface !== 'terminal' && active.prefs.tables === 'on' && 'Svg' in ui ? ui.Svg : undefined
     const copy = (copied: string) => {
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
