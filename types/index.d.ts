@@ -60,6 +60,7 @@ declare module 'claude-code' {
       isLight: boolean
       images: StateFamily<boolean>
       compacting: boolean
+      pinned: boolean
     }
   }
 }

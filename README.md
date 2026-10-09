@@ -62,7 +62,10 @@ Needs Claude Code 2.1.287 or later, in a terminal or the desktop app's Code tab.
 Every card rises in row by row and respects reduced motion. A skin only changes what is drawn: the stored
 conversation, and what the model reads, are untouched. Agents, plan mode and the permission prompt keep
 Claude Code's own drawing. The default skin is **noir**, black and white. Cards have no background of
-their own, so they sit in the page. On a light Claude Code theme every skin switches to its light palette.
+their own, so they sit in the page. On a light Claude Code theme every skin switches to its light palette. With the `auto` theme it
+follows your terminal's background (`COLORFGBG`) or, failing that, the system's light or dark mode.
+Set `SKINS_THEME=light` or `SKINS_THEME=dark` to choose yourself, for example when you launch with
+`claude --settings '{"theme":"dark"}'`, which skins cannot see.
 
 ## Make it yours
 
@@ -72,14 +75,19 @@ their own, so they sit in the page. On a light Claude Code theme every skin swit
 - **Ask your agent.** The mod gives Claude a `design` tool and a short guide, so "make me a skin that
   feels like a sunset" builds one and applies it while you watch.
 - **`/skin <name>`**, `/skin list`, `/skin off`, and `/skin rail|tables|shimmer|band|clip on|off` for quick switches.
+- **`/skin pin`** gives this folder a look of its own: later changes here stay here. **`/skin unpin`**
+  returns it to the default, and **`/skin share`** makes this folder's look the default for the rest.
+  Made skins are shared by every folder.
 
 Your choices are remembered across sessions.
 
 ## What it can reach
 
-It draws and remembers. It reads the session's directory, your context and plan usage, and Claude
-Code's theme setting; keeps its settings in the mod store; registers one tool for your agent; and
-compacts only when you press Compact, and copies only when you press Copy. It starts no process, touches no file and makes no network call.
+It draws and remembers. It reads the session's directory, your context and plan usage, Claude
+Code's theme setting and the `SKINS_THEME` and `COLORFGBG` variables; keeps its settings in the mod store; registers one tool for your agent; and
+compacts only when you press Compact, and copies only when you press Copy. With the `auto` theme it asks the system for its appearance (`defaults read -g AppleInterfaceStyle`
+on macOS, `gsettings get org.gnome.desktop.interface color-scheme` on GNOME); it starts no other
+process, touches no file and makes no network call.
 Check it yourself:
 
 ```bash

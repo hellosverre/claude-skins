@@ -64,12 +64,18 @@ const runSkin = ($: Engine, args: string) =>
     presentation: { isFullscreen: false, columns: 100 },
   })
 
-// The engine's own answers, so a hook can mount without a session.
-function stubEngine(on: On) {
+// The engine's own answers, so a hook can mount without a session. A test answering
+// the environment or the store itself leaves them out.
+function stubEngine(on: On, own: { env?: boolean; store?: boolean } = {}) {
   mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
-  on('store.get', () => ({ value: undefined }))
-  on('store.set', () => ({ value: undefined }))
+  if (!own.env) {
+    on('env.get', () => ({ value: undefined }))
+  }
+  if (!own.store) {
+    on('store.get', () => ({ value: undefined }))
+    on('store.set', () => ({ value: undefined }))
+  }
   on('ui.toast', () => ({ value: undefined }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 18 }] } }))
@@ -398,6 +404,7 @@ test('the band offers Compact, nudges at 70% context, and compacts on a press', 
   let compacted = 0
   const toasts: string[] = []
   const clock = mock.clock(on, { now: 10_000 })
+  on('session.cwd', () => ({ value: '/work' }))
   on('store.get', () => ({ value: undefined }))
   on('ui.toast', ($, e) => {
     toasts.push(e.text)
@@ -527,4 +534,54 @@ test('on the desktop the Copy button is laid over the card, in the corner the ca
   expect(card?.props?.alignSelf).toBe('flex-start')
   expect(overlay?.props?.position).toBe('absolute')
   expect(overlay?.children?.[0]?.type).toBe('Button')
+})
+
+const THEME_AUTO = [{ key: 'theme', label: 'Theme', kind: 'enum', value: 'auto', provider: { kind: 'engine' }, isLocked: false }]
+
+test('an auto theme follows the system, and SKINS_THEME overrides the setting', async ($, on) => {
+  let override: string | undefined
+  stubEngine(on, { env: true })
+  on('env.get', ($, e) => ({ value: e.name === 'SKINS_THEME' ? override : undefined }))
+  on('config.list', () => ({ value: THEME_AUTO as never }))
+  // macOS answers "does not exist" when the system is light.
+  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: 'The domain/default pair does not exist' } as never }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  const light = await $.ui.mount(toolUse(call('Bash', { command: 'ls' })))
+  expect(spanColor(await light.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#111111')
+
+  override = 'dark'
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  const dark = await $.ui.mount({ ...toolUse(call('Bash', { command: 'ls' })), requestId: 'again' })
+  expect(spanColor(await dark.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
+})
+
+test('/skin pin keeps a look to this folder, /skin unpin returns to the default', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  stubEngine(on, { store: true })
+  on('store.get', ($, e) => ({ value: store[e.key] }))
+  on('store.set', ($, e) => {
+    store[e.key] = e.value
+    return { value: undefined }
+  })
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+  on('config.list', () => ({ value: [] }))
+
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await runSkin($, 'pin')
+  await runSkin($, 'nord')
+
+  expect((store.folders as Record<string, { skin: string }>)['/work']?.skin).toBe('nord')
+  expect(store.prefs).toBeUndefined()
+
+  await runSkin($, 'unpin')
+  await runSkin($, 'dracula')
+
+  expect(store.folders).toEqual({})
+  expect((store.prefs as { skin: string }).skin).toBe('dracula')
 })

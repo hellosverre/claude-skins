@@ -4,7 +4,8 @@ import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-cod
 import type { CustomSkin, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
 import { DEFAULT_PREFS, parsePrefs, runSkinCommand, TOGGLES } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
-import { forTheme, isLightTheme } from './light'
+import { forTheme, resolveLight } from './light'
+import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
 import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
 import { clipLines, diffstat, pick } from './format'
@@ -47,6 +48,7 @@ const lightAtom = atom({ plugin: 'skins', key: 'isLight' } as const, false)
 const imagesAtom = atom({ plugin: 'skins', key: 'images' } as const, false)
 const usageAtom = atom({ plugin: 'skins', key: 'usage' } as const, { context: null, limits: [] } as UsageSnap)
 const compactingAtom = atom({ plugin: 'skins', key: 'compacting' } as const, false)
+const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
 
 const EDITS = new Set(['Edit', 'MultiEdit', 'Write'])
 
@@ -66,10 +68,39 @@ async function activeSkin($: EngineInterface): Promise<Active | null> {
   return skin === undefined ? null : { prefs, skin: forTheme(skin, await read($, lightAtom)), custom }
 }
 
-// Claude Code's own theme decides whether skins draw for a light or a dark background.
+// The system's appearance, for an `auto` theme: macOS's AppleInterfaceStyle, else GNOME's
+// color-scheme. Undefined when neither answers.
+async function systemDark($: EngineInterface): Promise<boolean | undefined> {
+  try {
+    const mac = await $.process.run(['defaults', 'read', '-g', 'AppleInterfaceStyle'], { timeoutMs: 2000 })
+
+    // Unset (exit 1, "does not exist") is how macOS says light.
+    return mac.exitCode === 0 ? mac.stdout.trim() === 'Dark' : /does not exist/.test(mac.stderr) ? false : undefined
+  } catch {}
+
+  try {
+    const gnome = await $.process.run(['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'], {
+      timeoutMs: 2000,
+    })
+
+    return gnome.exitCode === 0 ? gnome.stdout.includes('dark') : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Claude Code's own theme decides whether skins draw for a light or a dark background:
+// `SKINS_THEME` first, then the theme setting, and for `auto` the terminal and the system.
 async function refreshTheme($: EngineInterface): Promise<void> {
   const rows = await $.config.list()
-  const isLight = isLightTheme(rows.find(row => row.key === 'theme')?.value)
+  const hints = {
+    override: await $.env.get('SKINS_THEME'),
+    theme: rows.find(row => row.key === 'theme')?.value,
+    colorfgbg: await $.env.get('COLORFGBG'),
+  }
+  // Asks the system only when nothing before it decided.
+  const needsSystem = resolveLight(hints) !== resolveLight({ ...hints, systemDark: false })
+  const isLight = resolveLight({ ...hints, systemDark: needsSystem ? await systemDark($) : undefined })
 
   await update($, lightAtom, () => isLight)
 }
@@ -105,10 +136,56 @@ function parseCustom(raw: unknown): Record<string, CustomSkin> {
 
 async function load($: EngineInterface): Promise<void> {
   const custom = parseCustom(await $.store.get('custom'))
-  const prefs = parsePrefs(await $.store.get('prefs'), skinNames(custom))
+  const names = skinNames(custom)
+  const folders = parseFolders(await $.store.get('folders'), names)
+  const folder = await $.session.cwd()
+  const prefs = prefsFor(folder, folders, parsePrefs(await $.store.get('prefs'), names))
 
   await update($, customAtom, () => custom)
   await update($, prefsAtom, () => prefs)
+  await update($, pinnedAtom, () => Object.hasOwn(folders, folder))
+}
+
+// A pinned folder keeps its prefs to itself; every other folder shares the default.
+async function savePrefs($: EngineInterface, prefs: Prefs): Promise<void> {
+  if (!(await read($, pinnedAtom))) {
+    await $.store.set('prefs', prefs)
+
+    return
+  }
+
+  const names = skinNames(await read($, customAtom))
+  const folders = parseFolders(await $.store.get('folders'), names)
+  await $.store.set('folders', withFolder(folders, await $.session.cwd(), prefs))
+}
+
+// /skin pin, unpin and share: this folder's own look, or the default.
+async function runFolderCommand($: EngineInterface, word: string): Promise<string> {
+  const folder = await $.session.cwd()
+  const custom = await read($, customAtom)
+  const names = skinNames(custom)
+  const folders = parseFolders(await $.store.get('folders'), names)
+  const prefs = await read($, prefsAtom)
+
+  switch (word) {
+    case 'pin':
+      await $.store.set('folders', withFolder(folders, folder, prefs))
+      await update($, pinnedAtom, () => true)
+
+      return 'this folder keeps its own look'
+    case 'unpin': {
+      const fallback = parsePrefs(await $.store.get('prefs'), names)
+      await $.store.set('folders', withoutFolder(folders, folder))
+      await update($, pinnedAtom, () => false)
+      await update($, prefsAtom, () => fallback)
+
+      return `this folder follows the default: ${fallback.skin}`
+    }
+    default:
+      await $.store.set('prefs', prefs)
+
+      return `default look: ${prefs.skin}`
+  }
 }
 
 async function refreshUsage($: EngineInterface): Promise<void> {
@@ -125,7 +202,7 @@ async function commit($: EngineInterface, state: DesignState): Promise<void> {
   await update($, customAtom, () => state.custom)
   await update($, prefsAtom, () => state.prefs)
   await $.store.set('custom', state.custom)
-  await $.store.set('prefs', state.prefs)
+  await savePrefs($, state.prefs)
 }
 
 async function designState($: EngineInterface): Promise<DesignState> {
@@ -144,7 +221,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | name | list | off | rail | tables | shimmer | band | clip | icons]',
+      argumentHint: '[gallery | name | list | off | pin | unpin | share | rail | tables | shimmer | band | clip | icons]',
       immediate: true,
     })
     await $.tool.register({
@@ -170,6 +247,7 @@ export const register: Register = on => {
   // /clear, /resume and /branch reset $.state to its defaults and skip session.start.
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
     await load($)
+    await refreshTheme($)
 
     return next(e)
   })
@@ -270,6 +348,14 @@ export const register: Register = on => {
       return {}
     }
 
+    const word = e.args.trim().toLowerCase()
+
+    if (word === 'pin' || word === 'unpin' || word === 'share') {
+      $.ui.toast(await runFolderCommand($, word))
+
+      return {}
+    }
+
     const current = await read($, prefsAtom)
     const custom = await read($, customAtom)
     const outcome = runSkinCommand(e.args, current, skinNames(custom))
@@ -282,7 +368,9 @@ export const register: Register = on => {
       const width = lastColumns === undefined ? '' : `
 reply width: ${lastColumns} columns`
 
-      return { text: e.args.trim() === 'list' ? outcome.message + width : outcome.message }
+      const folder = (await read($, pinnedAtom)) ? 'this folder: pinned' : 'this folder: follows the default'
+
+      return { text: e.args.trim() === 'list' ? `${outcome.message}\n${folder}${width}` : outcome.message }
     }
 
     $.ui.toast(outcome.message)

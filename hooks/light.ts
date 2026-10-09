@@ -44,3 +44,35 @@ export const forTheme = (skin: Skin, isLight: boolean): Skin =>
 
 // Claude Code's theme names say light or dark in them: `light`, `light-daltonized`, ...
 export const isLightTheme = (value: unknown): boolean => typeof value === 'string' && value.includes('light')
+
+// Light, dark, or undefined when the name says neither (`auto`).
+const named = (value: unknown): boolean | undefined => {
+  const name = typeof value === 'string' ? value.trim().toLowerCase() : ''
+
+  return name.includes('light') ? true : name.includes('dark') ? false : undefined
+}
+
+// `COLORFGBG` is `<fg>;<bg>` (sometimes `<fg>;<default>;<bg>`); background 7 or 15 is a light one.
+const terminalLight = (colorfgbg: string | undefined): boolean | undefined => {
+  const bg = Number(colorfgbg?.split(';').at(-1))
+
+  return colorfgbg === undefined || Number.isNaN(bg) ? undefined : bg === 7 || bg === 15
+}
+
+export type ThemeHints = {
+  // `SKINS_THEME`, for a session whose theme comes from somewhere skins cannot read (`--settings`).
+  override?: string
+  // Claude Code's `theme` setting.
+  theme?: unknown
+  colorfgbg?: string
+  // The system's appearance, when it could be read.
+  systemDark?: boolean
+}
+
+// `SKINS_THEME` wins, then a theme that names light or dark, then, for `auto`, the
+// terminal's background and the system's appearance. Dark when nothing says.
+export const resolveLight = (hints: ThemeHints): boolean =>
+  named(hints.override) ??
+  named(hints.theme) ??
+  terminalLight(hints.colorfgbg) ??
+  (hints.systemDark === undefined ? false : !hints.systemDark)

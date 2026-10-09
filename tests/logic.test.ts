@@ -10,7 +10,8 @@ import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
 import { limitLabel, meterColor, metersOf, usageSvg } from '../hooks/svg-usage'
-import { deepen, isLightTheme, toLight } from '../hooks/light'
+import { deepen, isLightTheme, resolveLight, toLight } from '../hooks/light'
+import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
 import tokyoNight from '../hooks/themes/tokyo-night'
 
@@ -285,4 +286,26 @@ test('a light palette is derived with dark text, light bands and deepened colour
   expect(deepen('#ffffff', 0.5)).toBe('#808080')
   expect(isLightTheme('light-daltonized')).toBe(true)
   expect(isLightTheme('dark')).toBe(false)
+})
+
+test('SKINS_THEME wins, then the theme, then the terminal and the system for auto', async () => {
+  expect(resolveLight({ override: 'dark', theme: 'light' })).toBe(false)
+  expect(resolveLight({ override: 'Light', theme: 'dark' })).toBe(true)
+  expect(resolveLight({ override: '', theme: 'light-daltonized' })).toBe(true)
+  expect(resolveLight({ theme: 'auto', colorfgbg: '0;15' })).toBe(true)
+  expect(resolveLight({ theme: 'auto', colorfgbg: '15;default;0' })).toBe(false)
+  expect(resolveLight({ theme: 'auto', systemDark: false })).toBe(true)
+  expect(resolveLight({ theme: 'auto', systemDark: true })).toBe(false)
+  expect(resolveLight({ theme: 'auto' })).toBe(false)
+})
+
+test('a pinned folder keeps its own prefs, others follow the default', async () => {
+  const pinned = { ...DEFAULT_PREFS, skin: 'nord' }
+  const folders = parseFolders({ '/a': pinned, '/b': { skin: 'nope' } }, NAMES)
+
+  expect(prefsFor('/a', folders, DEFAULT_PREFS).skin).toBe('nord')
+  expect(prefsFor('/b', folders, DEFAULT_PREFS).skin).toBe(DEFAULT_PREFS.skin)
+  expect(prefsFor('/c', folders, DEFAULT_PREFS)).toBe(DEFAULT_PREFS)
+  expect(Object.keys(withoutFolder(withFolder(folders, '/c', pinned), '/a'))).toEqual(['/b', '/c'])
+  expect(parseFolders('junk', NAMES)).toEqual({})
 })
