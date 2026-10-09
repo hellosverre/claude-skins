@@ -34,13 +34,25 @@ export function fitText(text: string, width: number, isMono: boolean, size: numb
     return text
   }
 
+  // One pass: a width is the sum of its characters', so the cut is where the running sum
+  // and the ellipsis no longer fit. Re-measuring the whole text per character dropped was
+  // quadratic, and a code card's alt text runs to thousands of characters.
   const chars = [...text]
+  const room = width - measure('…', isMono, size)
+  let used = 0
+  let kept = 0
 
-  while (chars.length > 1 && measure(`${chars.join('')}…`, isMono, size) > width) {
-    chars.pop()
+  for (const char of chars) {
+    used += measure(char, isMono, size)
+
+    if (used > room) {
+      break
+    }
+
+    kept += 1
   }
 
-  return `${chars.join('')}…`
+  return `${chars.slice(0, Math.max(1, kept)).join('')}…`
 }
 
 // The room a reply gives a card, from the width the desktop reports in cells of its code

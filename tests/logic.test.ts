@@ -7,6 +7,7 @@ import { runDesign } from '../hooks/designer'
 import { clipLines, diffstat, formatDuration, formatMs, pick, shortenPath } from '../hooks/format'
 import { columnWidths, copyOf, cutCell, padCell, splitReply, widthOf } from '../hooks/markdown'
 import { codeSvg, tokenize } from '../hooks/svg-code'
+import { fitText } from '../hooks/svg-kit'
 import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
@@ -1042,4 +1043,12 @@ test('shell output folds per stream, and a failure names its exit code when it h
   expect(shellStatus({ ...ok, returnCodeInterpretation: 'No matches found' }, false, true)).toEqual({ tone: 'ok', text: 'ok No matches found' })
   expect(shellStatus({ ...ok, exitCode: 1 }, true, false)).toEqual({ tone: 'err', text: '✗ exit 1' })
   expect(shellStatus({ ...ok, interrupted: true }, true, false).tone).toBe('warn')
+})
+
+test('text cut to a width keeps what fits beside the ellipsis, and at least one character', () => {
+  // Mono at 12.5 is 7.5 a character: 4000 leaves room for 532 and the ellipsis.
+  expect(fitText('x'.repeat(5000), 4000, true, 12.5)).toBe(`${'x'.repeat(532)}…`)
+  expect(fitText('short', 4000, true, 12.5)).toBe('short')
+  expect(fitText('mmmm', 10, false, 12.5)).toBe('m…')
+  expect(fitText('iiii mmmm', 30, false, 10)).toBe('iiii m…')
 })
