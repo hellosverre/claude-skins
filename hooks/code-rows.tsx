@@ -1,5 +1,5 @@
 import { highlight, outputTokens, roleColors } from './highlight'
-import type { Role, Token } from './highlight'
+import type { Token } from './highlight'
 import { FOLD_CODE, foldButton, shownCount } from './fold'
 import type { Look, Ui } from './rows'
 

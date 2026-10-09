@@ -117,6 +117,8 @@ Drawn by the mod's own card code (`scripts/previews.ts`), not screenshots.
 | Above the prompt | Context and plan-limit rings, Compact button, nudge at 70% | Block meters, same button |
 | Your prompts | Rounded outline | The same |
 | Links and files | URLs are the app's own links; tool rows colour files this turn created (`ok`) or edited (`warn`) | URLs in prose are OSC 8 links where the terminal draws them (`FORCE_HYPERLINK=1` or `0` overrides the check), plain text elsewhere; paths with `:line`, numbers and versions coloured, this turn's files in `ok` or `warn` in rows and prose |
+| Diff fences | ` ```diff ` as the diff card, with Copy and `new only` (the code after the change) | Numbered old and new lines, added and removed in the skin's colours, the same two copies |
+| Side by side | Two or more tables or charts in a row share it when each gets 75 columns; stack otherwise | Tables and diagrams in a row sit side by side while their natural widths fit; stack otherwise |
 | Long blocks | Code cards past 24 lines cut there, with `▾ N more` | Code past 24 lines, tables past 14 rows and shell output past 8 + 4 lines fold behind `▾ N more` / `▴ less` |
 
 Every card has a Copy button (tables also `as text`, the table as drawn; a reply of several blocks ends in `copy reply`) and animates once, on first draw, respecting reduced motion. Only the
@@ -127,6 +129,18 @@ and the permission prompt keep Claude Code's own drawing.
 
 **Light and dark.** Every skin has both and follows Claude Code's theme. On `auto` it follows your
 terminal (`COLORFGBG`) or the system. Force one with `SKINS_THEME=light` or `SKINS_THEME=dark`.
+
+## For other mods
+
+skins adds `$.skins.markdown` to `$`. It draws markdown the way skins draws a reply, in the person's skin. It answers a tree, or `undefined` when skins is off or the text holds nothing it draws, and throws on a malformed argument. It draws no copy or fold controls, because a press cannot cross from one mod's tree to another's. List `skins` under `dependencies` in your `plugin.json` and Claude Code lays its types into your `.claude-plugin/types/`.
+
+```tsx
+let drawn
+try {
+  drawn = await $.skins.markdown({ surface: e.surface, text, columns: e.props.bodyColumns })
+} catch {}
+return drawn ?? <Markdown text={text} />
+```
 
 ## Compatibility
 
