@@ -4,7 +4,7 @@ import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-cod
 import type { CustomSkin, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
 import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
-import { forTheme, resolveLight } from './light'
+import { forTheme, gnomeDark, macDark, resolveLight, windowsDark } from './light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
 import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
@@ -73,25 +73,36 @@ async function activeSkin($: EngineInterface): Promise<Active | null> {
   return skin === undefined ? null : { prefs, skin: forTheme(skin, await read($, lightAtom)), custom }
 }
 
-// The system's appearance, for an `auto` theme: macOS's AppleInterfaceStyle, else GNOME's
-// color-scheme. Undefined when neither answers.
+// Where each system keeps its appearance, and how to read the answer.
+const PROBES = [
+  { argv: ['defaults', 'read', '-g', 'AppleInterfaceStyle'], dark: macDark },
+  {
+    argv: ['reg', 'query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize', '/v', 'AppsUseLightTheme'],
+    dark: windowsDark,
+  },
+  { argv: ['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'], dark: gnomeDark },
+] as const
+
+// The probe that answered last, so the timer asks one system rather than all three.
+let answering: (typeof PROBES)[number] | undefined
+
+// The system's appearance, for an `auto` theme. Undefined when no probe answers.
 async function systemDark($: EngineInterface): Promise<boolean | undefined> {
-  try {
-    const mac = await $.process.run(['defaults', 'read', '-g', 'AppleInterfaceStyle'], { timeoutMs: 2000 })
+  for (const probe of answering === undefined ? PROBES : [answering, ...PROBES]) {
+    try {
+      const dark = probe.dark(await $.process.run([...probe.argv], { timeoutMs: 2000 }))
 
-    // Unset (exit 1, "does not exist") is how macOS says light.
-    return mac.exitCode === 0 ? mac.stdout.trim() === 'Dark' : /does not exist/.test(mac.stderr) ? false : undefined
-  } catch {}
-
-  try {
-    const gnome = await $.process.run(['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'], {
-      timeoutMs: 2000,
-    })
-
-    return gnome.exitCode === 0 ? gnome.stdout.includes('dark') : undefined
-  } catch {
-    return undefined
+      if (dark !== undefined) {
+        answering = probe
+        return dark
+      }
+    } catch {
+      // The other systems' tools are missing here; that is expected, not a failure.
+    }
   }
+
+  answering = undefined
+  return undefined
 }
 
 // Claude Code's own theme decides whether skins draw for a light or a dark background:
