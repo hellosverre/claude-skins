@@ -1,6 +1,7 @@
 import { chartHeading, formatPercent, formatValue, seriesName } from './mermaid'
 import type { Chart, Flow, FlowEdge, Pie, XyChart } from './mermaid'
 import { cutCell, widthOf } from './markdown'
+import type { Art, Tone } from './mermaid-art'
 import type { Look } from './rows'
 import type { Slot } from './skin'
 
@@ -38,6 +39,35 @@ export function chartRows(look: Look, chart: Chart, maxWidth: number) {
         {`  ·  ${count}`}
       </Text>
       {chart.kind === 'flow' ? flowRows(look, chart, maxWidth) : chart.kind === 'xy' ? xyRows(look, chart, maxWidth) : pieRows(look, chart, maxWidth)}
+    </Box>
+  )
+}
+
+// A diagram laid out by the vendored renderer, under the same heading as ours.
+export function artRows(look: Look, art: Art, count: string) {
+  const { Box, Text } = look.ui
+  const { palette } = look.skin
+
+  const colorOf = (tone: Tone): string =>
+    typeof tone === 'object'
+      ? seriesColor(look, 'box' in tone ? tone.box : tone.series)
+      : tone === 'muted' ? palette.muted : palette.fg
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Text color={palette.muted}>
+        <Text bold>{art.kind.toUpperCase()}</Text>
+        {count === '' ? '' : `  ·  ${count}`}
+      </Text>
+      <Box flexDirection="column" marginTop={1}>
+        {art.rows.map(row => (
+          <Text>
+            {row.length === 0 ? ' ' : row.map(run => (run.tone === null ? run.text : (
+              <Text color={colorOf(run.tone)} bold={run.tone === 'title'}>{run.text}</Text>
+            )))}
+          </Text>
+        ))}
+      </Box>
     </Box>
   )
 }

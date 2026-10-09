@@ -425,7 +425,7 @@ const FLOW = 'Steps:\n\n```mermaid\nflowchart TD\n  A[Plan] --> B[Build]\n  B --
 const chartReply = (surface: (typeof SURFACES)[number], text = FLOW) =>
   ({ ...SITE, surface, component: 'AssistantMessage', requestId: 'm1', props: { text, isFirstOfReply: true } }) as const
 
-test('a Mermaid fence is a chart card on the desktop and boxes in the terminal', async ($, on) => {
+test('a Mermaid fence is a chart card on the desktop and a laid-out diagram in the terminal', async ($, on) => {
   stubEngine(on)
 
   const desktop = await $.ui.mount(chartReply('desktop'))
@@ -434,30 +434,52 @@ test('a Mermaid fence is a chart card on the desktop and boxes in the terminal',
   expect(card?.props.alt).toContain('Build → Live (ship)')
   await desktop.unmount()
 
+  // Boxes drawn in cells, each in a colour of its own, the links quiet.
   const terminal = await $.ui.mount(chartReply('terminal'))
   expect(await terminal.find({ type: 'Svg' })).toBeUndefined()
-  expect(await terminal.find({ type: 'Text', text: 'Plan' })).toBeDefined()
-  expect(await terminal.find({ type: 'Text', text: '↓  ship' })).toBeDefined()
+  expect(await terminal.find({ type: 'Text', text: 'FLOWCHART' })).toBeDefined()
+  const art = (await terminal.findAll({ type: 'Text' })).map(text => JSON.stringify(text.children ?? []))
+  expect(art.some(row => row.includes('┌') && row.includes('┐'))).toBe(true)
+  expect(art.some(row => row.includes('▼'))).toBe(true)
+  const plan = await terminal.find({ type: 'Text', text: 'Plan' })
+  const build = await terminal.find({ type: 'Text', text: 'Build' })
+  expect(spanColor(plan, '│')).toBeDefined()
+  expect(spanColor(plan, '│')).not.toBe(spanColor(build, '│'))
   await terminal.unmount()
 
-  const bars = await $.ui.mount(chartReply('terminal', '```mermaid\npie title Pets\n  "Dogs" : 3\n  "Cats" : 1\n```'))
-  expect(await bars.find({ type: 'Text', text: '3  75%' })).toBeDefined()
+  const sequence = await $.ui.mount(chartReply('terminal', '```mermaid\nsequenceDiagram\n  Alice->>Bob: Hi\n  Bob-->>Alice: Yo\n```'))
+  expect(await sequence.find({ type: 'Text', text: 'SEQUENCE' })).toBeDefined()
+  expect(await sequence.find({ type: 'Text', text: 'Alice' })).toBeDefined()
+  await sequence.unmount()
+
+  const bars = await $.ui.mount(chartReply('terminal', '```mermaid\nxychart-beta\n  x-axis [a, b, c]\n  bar [3, 7, 5]\n```'))
+  const chartRows = (await bars.findAll({ type: 'Text' })).map(text => JSON.stringify(text.children ?? []))
+  expect(chartRows.some(row => row.includes('█'))).toBe(true)
   await bars.unmount()
 
-  // Shares that already sum to 100 show once; a line series is a dot on a rule; a decision
-  // keeps a border of its own.
+  // Pies stay ours: a bar per slice with its share.
+  const pie = await $.ui.mount(chartReply('terminal', '```mermaid\npie title Pets\n  "Dogs" : 3\n  "Cats" : 1\n```'))
+  expect(await pie.find({ type: 'Text', text: '3  75%' })).toBeDefined()
+  await pie.unmount()
+
   const shares = await $.ui.mount(chartReply('terminal', '```mermaid\npie\n  "a" : 91\n  "b" : 9\n```'))
   expect(await shares.find({ type: 'Text', text: '9%' })).toBeDefined()
   await shares.unmount()
+})
 
-  const lines = await $.ui.mount(chartReply('terminal', '```mermaid\nxychart-beta\n  x-axis [a, b]\n  bar [2, 4]\n  line [1, 4]\n```'))
-  expect(await lines.find({ type: 'Text', text: '■ bar' })).toBeDefined()
-  await lines.unmount()
+test('a diagram too wide for the terminal falls back to rows, one nothing can read to its code', async ($, on) => {
+  stubEngine(on)
 
-  const decision = await $.ui.mount(chartReply('terminal', '```mermaid\nflowchart TD\n  A[Go] --> B{Ok?}\n```'))
-  const borders = (await decision.findAll({ type: 'Box' })).map(box => box.props.borderStyle)
-  expect(borders).toContain('double')
+  // Too wide even top to bottom: our own rows draw it.
+  const label = 'A step whose name runs on well past forty cells'
+  const fallback = await $.ui.mount({ ...chartReply('terminal', `\`\`\`mermaid\nflowchart LR\n  A[${label}] --> B[Done]\n\`\`\``), viewport: { columns: 40, rows: 30 } })
+  const borders = (await fallback.findAll({ type: 'Box' })).map(box => box.props.borderStyle)
   expect(borders).toContain('single')
+  await fallback.unmount()
+
+  const broken = await $.ui.mount(chartReply('terminal', '```mermaid\nsequenceDiagram\n  ->>: ???\n```'))
+  expect(await broken.find({ type: 'Text', text: 'SEQUENCE' })).toBeUndefined()
+  await broken.unmount()
 })
 
 test('with charts off, or Mermaid the parser cannot read, the fence keeps its code drawing', async ($, on) => {

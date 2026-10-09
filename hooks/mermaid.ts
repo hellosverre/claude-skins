@@ -363,5 +363,6 @@ export const CHART_HINT = [
   'This transcript draws ```mermaid fences as pictures. Supported: `flowchart TD|LR` (nodes A[box], A(round), A{decision};',
   'edges -->, -.->, ==>, with labels -->|yes|), `xychart-beta` (title "…", x-axis [a, b], y-axis "unit" 0 --> 100,',
   'bar [..], line [..]) and `pie` (title …, "label" : value). No subgraphs or styling; at most 40 nodes.',
+  'In the terminal `sequenceDiagram`, `stateDiagram-v2`, `classDiagram` and `erDiagram` draw too.',
   'When a process, a comparison of numbers or a breakdown reads better as a picture than as prose or a table, draw one.',
 ].join(' ')

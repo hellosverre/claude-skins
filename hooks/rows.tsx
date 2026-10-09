@@ -5,8 +5,9 @@ import { formatDuration, formatMs } from './format'
 import { columnWidths, cutCell } from './markdown'
 import type { Segment, Table } from './markdown'
 import { splitBlocks } from './blocks'
-import { chartRows } from './chart-rows'
-import { parseMermaid } from './mermaid'
+import { artRows, chartRows } from './chart-rows'
+import { chartHeading, parseMermaid } from './mermaid'
+import { mermaidArt } from './mermaid-art'
 import type { Chart } from './mermaid'
 import { blockRows } from './prose'
 import type { Icons, Kind, Skin } from './skin'
@@ -402,6 +403,19 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
 
         if (segment.kind === 'code') {
           const chart = segment.lang === 'mermaid' && look.prefs.charts ? parseMermaid(segment.code) : null
+          // The terminal lays diagrams out in two dimensions; pies stay ours.
+          const art = Svg === undefined && segment.lang === 'mermaid' && look.prefs.charts && chart?.kind !== 'pie'
+            ? mermaidArt(segment.code, maxWidth, look.prefs.icons === 'ascii')
+            : null
+
+          if (art !== null) {
+            return (
+              <Box flexDirection="column">
+                {artRows(look, art, chart === null ? '' : chartHeading(chart).count)}
+                {copyRow(look, `copy-${i}`, segment.code)}
+              </Box>
+            )
+          }
 
           if (chart !== null) {
             return Svg === undefined ? (

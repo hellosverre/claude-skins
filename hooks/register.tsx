@@ -13,6 +13,7 @@ import { drawsBlocks, hasBlocks } from './blocks'
 import { copyOf, splitReply } from './markdown'
 import type { Segment } from './markdown'
 import { CHART_HINT, parseMermaid } from './mermaid'
+import { artKind } from './mermaid-art'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
@@ -578,7 +579,8 @@ reply width: ${lastColumns} columns`
       return next(e)
     }
 
-    const charted = (lang: string, code: string) => lang === 'mermaid' && parseMermaid(code) !== null
+    const charted = (lang: string, code: string) =>
+      lang === 'mermaid' && (parseMermaid(code) !== null || (e.surface === 'terminal' && artKind(code) !== null))
     const segments: Segment[] = cards ? splitReply(text) : charts ? splitReply(text, { tables: false, fence: charted }) : [{ kind: 'text', text }]
     const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
     const drawn = segments.some(segment => segment.kind !== 'text' || (prefs.markdown && drawsBlocks(segment.text, e.surface)))
