@@ -35,7 +35,7 @@ export function shellOutputOf(output: unknown): ShellOutput | null {
 type Line = { text: string; isErr: boolean } | { fold: number }
 
 // A stream's lines, colour codes stripped and trailing blank lines dropped.
-function streamLines(text: string, isErr: boolean): { text: string; isErr: boolean }[] {
+export function streamLines(text: string, isErr: boolean): { text: string; isErr: boolean }[] {
   const lines = text.replace(ANSI, '').replace(/\r/g, '').replace(/\t/g, '  ').split('\n')
   const end = lines.length - [...lines].reverse().findIndex(line => line.trim() !== '')
 

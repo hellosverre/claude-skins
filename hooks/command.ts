@@ -1,4 +1,4 @@
-import type { Prefs } from '../types'
+import type { CalmSnapshot, Prefs } from '../types'
 
 export const DEFAULT_PREFS: Prefs = {
   skin: 'noir',
@@ -13,6 +13,8 @@ export const DEFAULT_PREFS: Prefs = {
   charts: true,
   math: true,
   commands: true,
+  shell: true,
+  calm: null,
 }
 
 // The on/off settings, by the word /skin and the settings pane use for each. Tables have a
@@ -27,6 +29,7 @@ export const TOGGLES = {
   charts: 'charts',
   math: 'math',
   commands: 'commands',
+  shell: 'shell',
 } as const satisfies Record<string, keyof Prefs>
 
 export type ToggleWord = keyof typeof TOGGLES
@@ -56,6 +59,15 @@ export function tablesOr(value: unknown, fallback: Prefs['tables']): Prefs['tabl
 export const nextTables = (mode: Prefs['tables']): Prefs['tables'] =>
   TABLE_MODES[(TABLE_MODES.indexOf(mode) + 1) % TABLE_MODES.length] ?? 'on'
 
+// A stored calm snapshot, or null when it is not one: then calm reads as off.
+function calmOf(value: unknown): CalmSnapshot | null {
+  const saved = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null
+
+  return saved !== null && typeof saved.shimmer === 'boolean' && typeof saved.rail === 'boolean' && typeof saved.quiet === 'boolean'
+    ? { shimmer: saved.shimmer, rail: saved.rail, quiet: saved.quiet }
+    : null
+}
+
 // What the store hands back may be old, hand-edited or from another version.
 export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
   const saved = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
@@ -77,7 +89,22 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
     charts: flagOr(saved.charts, DEFAULT_PREFS.charts),
     math: flagOr(saved.math, DEFAULT_PREFS.math),
     commands: flagOr(saved.commands, DEFAULT_PREFS.commands),
+    shell: flagOr(saved.shell, DEFAULT_PREFS.shell),
+    calm: calmOf(saved.calm),
   }
+}
+
+// /skin calm: no motion, one line per tool row, read-only output folded. What it changes is
+// kept, so calm off puts back what was there before. Failures stay whole either way
+// (register.tsx draws them past quiet while calm is on).
+export function withCalm(current: Prefs, on: boolean): Prefs {
+  if (on) {
+    return current.calm !== null
+      ? current
+      : { ...current, calm: { shimmer: current.shimmer, rail: current.rail, quiet: current.quiet }, shimmer: false, rail: false, quiet: true }
+  }
+
+  return current.calm === null ? current : { ...current, ...current.calm, calm: null }
 }
 
 const changed = (prefs: Prefs, message: string): Outcome => ({ prefs, message, channel: 'toast' })
@@ -102,6 +129,8 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
       `charts ${onOff(current.charts)}`,
       `math ${onOff(current.math)}`,
       `commands ${onOff(current.commands)}`,
+      `shell ${onOff(current.shell)}`,
+      `calm ${onOff(current.calm !== null)}`,
     ].join(' · '),
   ].join('\n')
 
@@ -131,6 +160,12 @@ export function runSkinCommand(args: string, current: Prefs, names: readonly str
       return current.skin === 'off'
         ? changed({ ...current, skin: DEFAULT_PREFS.skin }, `skin: ${DEFAULT_PREFS.skin}`)
         : changed(current, `skin: ${current.skin}`)
+    case 'calm':
+      return value === 'on' || value === undefined
+        ? changed(withCalm(current, true), current.calm === null ? 'calm on' : 'calm is already on')
+        : value === 'off'
+          ? changed(withCalm(current, false), current.calm === null ? 'calm is already off' : 'calm off: your settings are back')
+          : refused(current, 'usage: /skin calm [on|off]')
     case 'tables':
       return value === 'on' || value === 'text' || value === 'off'
         ? changed({ ...current, tables: value }, `tables ${value}`)

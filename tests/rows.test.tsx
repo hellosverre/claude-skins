@@ -3,6 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { widthOf } from '../hooks/markdown'
+import noir from '../hooks/themes/noir'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -470,7 +471,8 @@ test('on the desktop an edit is a diff card and a shell command a terminal card'
   await shell.unmount()
 
   const terminal = await $.ui.mount({ ...result('Bash', { stdout: 'built', stderr: '', interrupted: false }), surface: 'terminal' })
-  expect(await terminal.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  expect(await terminal.find({ type: 'Svg' })).toBeUndefined()
+  expect(await terminal.find({ type: 'Text', text: 'built' })).toBeDefined()
 })
 
 test('a code fence is a card on the desktop and stays markdown in the terminal', async ($, on) => {
@@ -888,7 +890,7 @@ test('quiet output folds a read-only call to its row, a failure to its error lin
 
   // Off by default: a read-only call keeps its output.
   const before = await $.ui.mount(result(q1, 'Bash', { stdout: 'On branch main', stderr: '', interrupted: false }))
-  expect(await before.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  expect(await before.find({ type: 'Text', text: 'On branch main' })).toBeDefined()
   await before.unmount()
 
   await runSkin($, 'quiet on')
@@ -898,7 +900,7 @@ test('quiet output folds a read-only call to its row, a failure to its error lin
   await grep.unmount()
 
   const quiet = await $.ui.mount(result(q1, 'Bash', { stdout: 'On branch main', stderr: '', interrupted: false }))
-  expect(await quiet.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+  expect(await quiet.find({ type: 'Text', text: 'On branch main' })).toBeUndefined()
   await quiet.unmount()
 
   const failed = await $.ui.mount(result(q1, 'Bash', { stdout: '', stderr: 'fatal: not a git repository', interrupted: false }, true))
@@ -907,7 +909,7 @@ test('quiet output folds a read-only call to its row, a failure to its error lin
 
   // A call that might write keeps its output.
   const loud = await $.ui.mount(result(q2, 'Bash', { stdout: 'built', stderr: '', interrupted: false }))
-  expect(await loud.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  expect(await loud.find({ type: 'Text', text: 'built' })).toBeDefined()
 })
 
 test('/skin copy copies the last reply and says so, or says there is nothing yet', async ($, on) => {
@@ -1029,4 +1031,150 @@ test('slash-command output with key: value lines is a table, prose keeps its row
   await runSkin($, 'commands off')
   const off = await $.ui.mount(output(cost))
   expect(await off.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
+// Runs shell calls through the engine so the skin records each one's command, and hands
+// back the ids the kit gave them, in order.
+async function ranShells($: Engine, on: On, commands: readonly string[]): Promise<string[]> {
+  const ids: string[] = []
+  on('tool.call', ($, e) => {
+    ids.push(e.tool_use_id)
+    return { result: { stdout: '', stderr: '', interrupted: false } }
+  })
+
+  for (const command of commands) {
+    await $.tool.call({ tool: 'Bash', command })
+  }
+
+  return ids
+}
+
+const shellResult = (id: string, output: unknown, isErrored = false, surface: (typeof SURFACES)[number] = 'terminal') =>
+  ({ ...SITE, surface, component: 'ToolResult', requestId: id, props: { tool_use_id: id, tool: 'Bash', output, isErrored } }) as const
+
+test('the terminal draws shell output as a card: the command and a tick, nothing of the stock row', async ($, on) => {
+  stubEngine(on)
+  const [id = ''] = await ranShells($, on, ['pnpm test --filter hub'])
+
+  const ui = await $.ui.mount(shellResult(id, { stdout: 'Tests  148 passed (148)', stderr: '', interrupted: false }))
+  expect(await ui.find({ type: 'Text', text: '$ pnpm test --filter hub' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '✓' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Tests  148 passed (148)' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+})
+
+test('a failed shell call shows its exit code, and stderr under its own label in the error colour', async ($, on) => {
+  stubEngine(on)
+  const [id = '', other = ''] = await ranShells($, on, ['pnpm tsc', 'pnpm lint'])
+  const palette = noir.palette
+
+  const record = await $.ui.mount(shellResult(id, { stdout: 'src/server.ts', stderr: 'error TS2322: Type string is not assignable to number', interrupted: false }, true))
+  expect(await record.find({ type: 'Text', text: '✗ failed' })).toBeDefined()
+  expect(await record.find({ type: 'Text', text: 'stderr' })).toBeDefined()
+  const err = (await record.find({ type: 'Text', text: 'error TS2322: Type string is not assignable to number' })) as Found
+  expect(err?.props.color).toBe(palette.err)
+  const out = (await record.find({ type: 'Text', text: 'src/server.ts' })) as Found
+  expect(out?.props.color).toBe(palette.fg)
+  await record.unmount()
+
+  // The error text Claude Code hands back in place of the record names the exit code.
+  const text = await $.ui.mount(shellResult(other, 'Exit code 2\nerror: 3 problems', true))
+  expect(await text.find({ type: 'Text', text: '$ pnpm lint' })).toBeDefined()
+  expect(await text.find({ type: 'Text', text: '✗ exit 2' })).toBeDefined()
+  expect(await text.find({ type: 'Text', text: 'error: 3 problems' })).toBeDefined()
+  expect(await text.find({ type: 'Text', text: /Exit code/ })).toBeUndefined()
+})
+
+test('long shell output folds to its head and tail on the terminal, each stream on its own', async ($, on) => {
+  stubEngine(on)
+  const [id = ''] = await ranShells($, on, ['seq 40'])
+  const stdout = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`).join('\n')
+
+  const ui = await $.ui.mount(shellResult(id, { stdout, stderr: 'warn: slow disk', interrupted: false }))
+  expect(await ui.find({ type: 'Text', text: 'line 8' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'line 9' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: '… 28 lines hidden' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'line 37' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'line 40' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'warn: slow disk' })).toBeDefined()
+})
+
+test('/skin shell off gives shell output back to Claude Code on both surfaces', async ($, on) => {
+  stubEngine(on)
+  const [id = ''] = await ranShells($, on, ['pnpm build'])
+  const output = { stdout: 'built', stderr: '', interrupted: false }
+
+  await runSkin($, 'shell off')
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount(shellResult(id, output, false, surface))
+    expect(await ui.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+    expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+    await ui.unmount()
+  }
+
+  await runSkin($, 'shell on')
+  const back = await $.ui.mount(shellResult(id, output))
+  expect(await back.find({ type: 'Text', text: '$ pnpm build' })).toBeDefined()
+  await back.unmount()
+
+  // A command sent to the background has no output yet: Claude Code's row says where it went.
+  const background = await $.ui.mount(shellResult(id, { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b1' }))
+  expect(await background.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
+test('/skin calm stills the spinner, drops the rail, folds read-only output and keeps failures whole', async ($, on) => {
+  stubEngine(on)
+  const [look = '', loud = ''] = await ranShells($, on, ['git status', 'pnpm build'])
+
+  await runSkin($, 'calm')
+
+  const row = await $.ui.mount(toolUse(call('Bash', { command: 'pnpm test' })))
+  expect(await row.find({ type: 'Text', text: '┃' })).toBeUndefined()
+  await row.unmount()
+
+  const spinner = await $.ui.mount({ ...SITE, surface: 'terminal', component: 'Spinner', requestId: 'sp', props: { mode: 'thinking', word: 'Thinking', message: null, suffix: '…' } })
+  expect(await spinner.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  await spinner.unmount()
+
+  const quiet = await $.ui.mount(shellResult(look, { stdout: 'On branch main', stderr: '', interrupted: false }))
+  expect(await quiet.find({ type: 'Text', text: 'On branch main' })).toBeUndefined()
+  await quiet.unmount()
+
+  // A failure is drawn whole: every stderr line, not quiet's one line or the fold.
+  const stderr = Array.from({ length: 30 }, (_, i) => `error ${i + 1}`).join('\n')
+  const failed = await $.ui.mount(shellResult(look, { stdout: '', stderr, interrupted: false }, true))
+  expect(await failed.find({ type: 'Text', text: '✗ failed' })).toBeDefined()
+  expect(await failed.find({ type: 'Text', text: 'error 15' })).toBeDefined()
+  expect(await failed.find({ type: 'Text', text: /lines hidden/ })).toBeUndefined()
+  await failed.unmount()
+
+  const built = await $.ui.mount(shellResult(loud, { stdout: 'built', stderr: '', interrupted: false }))
+  expect(await built.find({ type: 'Text', text: 'built' })).toBeDefined()
+})
+
+test('/skin calm off puts back the settings it changed, and keeps changes made meanwhile', async ($, on) => {
+  stubEngine(on)
+  const [look = ''] = await ranShells($, on, ['git status'])
+
+  await runSkin($, 'calm on')
+  await runSkin($, 'nord')
+  await runSkin($, 'calm off')
+
+  const row = await $.ui.mount(toolUse(call('Bash', { command: 'pnpm test' })))
+  expect(await row.find({ type: 'Text', text: '┃' })).toBeDefined()
+  await row.unmount()
+
+  const spinner = await $.ui.mount({ ...SITE, surface: 'terminal', component: 'Spinner', requestId: 'sp', props: { mode: 'thinking', word: 'Thinking', message: null, suffix: '…' } })
+  expect(await spinner.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+  await spinner.unmount()
+
+  const output = await $.ui.mount(shellResult(look, { stdout: 'On branch main', stderr: '', interrupted: false }))
+  expect(await output.find({ type: 'Text', text: 'On branch main' })).toBeDefined()
+  await output.unmount()
+
+  const listed = await runSkin($, 'list')
+  expect(JSON.stringify(listed)).toContain('● nord')
+  expect(JSON.stringify(listed)).toContain('calm off')
 })

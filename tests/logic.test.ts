@@ -1,11 +1,13 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULT_PREFS, parsePrefs, runSkinCommand } from '../hooks/command'
+import { DEFAULT_PREFS, parsePrefs, runSkinCommand, withCalm } from '../hooks/command'
+import { foldLines, shellResultOf, shellStatus } from '../hooks/shell'
 import { buildCustom, resolveSkin, skinNames, withSlot } from '../hooks/custom'
 import { runDesign } from '../hooks/designer'
 import { clipLines, diffstat, formatDuration, formatMs, pick, shortenPath } from '../hooks/format'
 import { columnWidths, copyOf, cutCell, padCell, splitReply, widthOf } from '../hooks/markdown'
 import { codeSvg, tokenize } from '../hooks/svg-code'
+import { fitText } from '../hooks/svg-kit'
 import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
@@ -1009,4 +1011,44 @@ test('each system says dark, light, or nothing', async () => {
   expect(gnomeDark(ran(0, "'prefer-dark'\n"))).toBe(true)
   expect(gnomeDark(ran(0, "'default'\n"))).toBe(false)
   expect(gnomeDark(ran(1, '', 'No such schema'))).toBe(undefined)
+})
+
+test('calm saves what it changes and calm off puts exactly that back', () => {
+  const mine = { ...DEFAULT_PREFS, rail: false, quiet: false, shimmer: true, skin: 'nord' }
+  const calm = withCalm(mine, true)
+
+  expect(calm).toEqual({ ...mine, shimmer: false, rail: false, quiet: true, calm: { shimmer: true, rail: false, quiet: false } })
+  expect(withCalm(calm, true)).toBe(calm)
+  expect(withCalm({ ...calm, skin: 'dracula' }, false)).toEqual({ ...mine, skin: 'dracula' })
+  expect(withCalm(mine, false)).toBe(mine)
+  expect(runSkinCommand('calm', mine, NAMES).prefs).toEqual(calm)
+  expect(runSkinCommand('calm off', calm, NAMES).prefs).toEqual(mine)
+  expect(runSkinCommand('calm maybe', mine, NAMES).channel).toBe('row')
+  // A stored snapshot survives the round trip; a broken one reads as calm off.
+  expect(parsePrefs(JSON.parse(JSON.stringify(calm)), NAMES).calm).toEqual(calm.calm)
+  expect(parsePrefs({ calm: { shimmer: 'yes' } }, NAMES).calm).toBeNull()
+  expect(runSkinCommand('shell off', DEFAULT_PREFS, NAMES).prefs.shell).toBe(false)
+})
+
+test('shell output folds per stream, and a failure names its exit code when it has one', () => {
+  expect(foldLines([1, 2, 3, 4, 5], 2, 2)).toEqual([1, 2, 3, 4, 5])
+  expect(foldLines([1, 2, 3, 4, 5, 6], 2, 2)).toEqual([1, 2, { fold: 2 }, 5, 6])
+
+  expect(shellResultOf('Exit code 127\nbash: nope: command not found', true)).toEqual({ stdout: '', stderr: 'bash: nope: command not found', interrupted: false, exitCode: 127 })
+  expect(shellResultOf('<tool_use_error>blocked</tool_use_error>', true)).toEqual({ stdout: '', stderr: 'blocked', interrupted: false })
+  expect(shellResultOf({ content: 'x' }, false)).toBeNull()
+
+  const ok = { stdout: '', stderr: '', interrupted: false }
+  expect(shellStatus(ok, false, false)).toEqual({ tone: 'ok', text: '✓' })
+  expect(shellStatus({ ...ok, returnCodeInterpretation: 'No matches found' }, false, true)).toEqual({ tone: 'ok', text: 'ok No matches found' })
+  expect(shellStatus({ ...ok, exitCode: 1 }, true, false)).toEqual({ tone: 'err', text: '✗ exit 1' })
+  expect(shellStatus({ ...ok, interrupted: true }, true, false).tone).toBe('warn')
+})
+
+test('text cut to a width keeps what fits beside the ellipsis, and at least one character', () => {
+  // Mono at 12.5 is 7.5 a character: 4000 leaves room for 532 and the ellipsis.
+  expect(fitText('x'.repeat(5000), 4000, true, 12.5)).toBe(`${'x'.repeat(532)}…`)
+  expect(fitText('short', 4000, true, 12.5)).toBe('short')
+  expect(fitText('mmmm', 10, false, 12.5)).toBe('m…')
+  expect(fitText('iiii mmmm', 30, false, 10)).toBe('iiii m…')
 })

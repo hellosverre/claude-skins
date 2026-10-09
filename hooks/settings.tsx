@@ -18,6 +18,7 @@ export type SettingsModel = {
 export type SettingsActions = {
   pick: (name: string) => void
   toggle: (word: ToggleWord) => void
+  calm: () => void
   tables: () => void
   icons: () => void
   edit: (slot: SkinSlot) => void
@@ -116,6 +117,8 @@ export function settingsPane(look: Look, ui: PaneUi, model: SettingsModel, actio
         {toggle('charts', 'g', prefs.charts)}
         {toggle('math', 'x', prefs.math)}
         {toggle('commands', 'o', prefs.commands)}
+        {toggle('shell', 'h', prefs.shell)}
+        <Button key="calm" label={`calm ${mark(prefs.calm !== null)}`} hotkey="k" plain dimColor={prefs.calm === null} onPress={() => actions.calm()} />
         <Button key="icons" label={`icons ${prefs.icons}`} hotkey="i" plain onPress={() => actions.icons()} />
       </Box>
 
