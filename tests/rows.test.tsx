@@ -356,6 +356,71 @@ test('the desktop draws a table as an animated vector card, with a tooltip on a 
   expect(svg?.props.alt).toContain('Skin | Accent | Note')
 })
 
+test('a card animates on its first draw only, so a streaming reply does not flicker', async ($, on) => {
+  stubEngine(on)
+
+  const reply = (requestId: string, text: string) =>
+    ({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId, props: { text, isFirstOfReply: true } }) as const
+  const sourceOf = async (requestId: string, text: string) => {
+    const ui = await $.ui.mount(reply(requestId, text))
+    const source = ((await ui.find({ type: 'Svg' })) as { props: { source: string } } | undefined)?.props.source ?? ''
+
+    await ui.unmount()
+
+    return source
+  }
+  const table = '| a | b |\n|---|---|\n| 1 | 2 |'
+
+  const first = await sourceOf('s1', table)
+  const streamed = await sourceOf('s1', `${table}\n| 3 | 4 |`)
+  const other = await sourceOf('s2', table)
+
+  expect(first).not.toContain('animation:none!important')
+  expect(streamed).toContain('animation:none!important')
+  expect(streamed).toContain('>3<')
+  expect(other).not.toContain('animation:none!important')
+})
+
+test('on the desktop a shell fence keeps the app’s own block, for its Run button', async ($, on) => {
+  stubEngine(on)
+
+  const reply = (requestId: string, text: string) =>
+    ({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId, props: { text, isFirstOfReply: true } }) as const
+
+  const alone = await $.ui.mount(reply('sh1', 'Run:\n\n```bash\npnpm test\n```'))
+  expect(await alone.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  await alone.unmount()
+
+  const mixed = await $.ui.mount(reply('sh2', '| a | b |\n|---|---|\n| 1 | 2 |\n\n```bash\npnpm test\n```'))
+  const markdown = (await mixed.find({ type: 'Markdown', text: 'pnpm test' })) as { props: { text: string } } | undefined
+  expect(markdown?.props.text).toContain('```bash')
+  expect(await mixed.find({ type: 'Svg' })).toBeDefined()
+})
+
+test('with tables as text the desktop gets a text grid and the app’s own code block, both selectable', async ($, on) => {
+  stubEngine(on)
+
+  await runSkin($, 'tables text')
+
+  const ui = await $.ui.mount({
+    ...SITE,
+    surface: 'desktop',
+    component: 'AssistantMessage',
+    requestId: 'tx1',
+    props: { text: '| Route | Limit |\n|---|---|\n| /chat | 60 |\n\n```ts\nconst a = 1\n```', isFirstOfReply: true },
+  })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\/chat/ })).toBeDefined()
+  const code = (await ui.find({ type: 'Markdown', text: 'const a' })) as { props: { text: string } } | undefined
+  expect(code?.props.text).toContain('```ts')
+  await ui.unmount()
+
+  await runSkin($, 'tables off')
+
+  const stock = await $.ui.mount({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId: 'tx2', props: { text: '| a |\n|---|\n| 1 |', isFirstOfReply: true } })
+  expect(await stock.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
 test('on the desktop an edit is a diff card and a shell command a terminal card', async ($, on) => {
   stubEngine(on)
 

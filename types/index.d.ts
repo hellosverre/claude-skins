@@ -22,7 +22,8 @@ export type Prefs = {
   skin: string
   icons: 'unicode' | 'ascii'
   rail: boolean
-  tables: boolean
+  // 'text' keeps the skin but draws tables and code as text the desktop can select.
+  tables: 'on' | 'text' | 'off'
   shimmer: boolean
   band: boolean
   clipOutput: boolean

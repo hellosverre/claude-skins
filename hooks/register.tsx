@@ -2,18 +2,19 @@ import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
 import type { CustomSkin, Prefs, SkinSlot, TurnStats, UsageSnap } from '../types'
-import { DEFAULT_PREFS, parsePrefs, runSkinCommand, TOGGLES } from './command'
+import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
 import { forTheme, resolveLight } from './light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
 import { DESIGN_TOOL, runDesign } from './designer'
 import type { DesignState } from './designer'
 import { clipLines, diffstat, pick } from './format'
-import { splitReply } from './markdown'
+import { isShell, splitReply } from './markdown'
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
 import { settingsPane } from './settings'
+import { sightings } from './sightings'
 import { ICONS } from './skin'
 import type { Skin } from './skin'
 import { hunksOf } from './svg-diff'
@@ -122,6 +123,11 @@ const lookOf = (
   ...(copy === undefined ? {} : { copy }),
 })
 
+// A drawing's cards animate on their first draw only, keyed by the drawing's instance
+// (the message id, the tool_use_id) so two replies never share a card.
+const seenCards = sightings()
+const drawnOnce = (instance: string) => (key: string) => seenCards(`${instance}:${key}`)
+
 // Made skins from the store, each checked again: the store may hold an older shape.
 function parseCustom(raw: unknown): Record<string, CustomSkin> {
   const saved = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
@@ -195,7 +201,9 @@ async function refreshUsage($: EngineInterface): Promise<void> {
     limits: usage.rateLimits.map(limit => ({ label: limitLabel(limit.kind), percent: limit.percentUsed })),
   }
 
-  await update($, usageAtom, () => snap)
+  // The same numbers keep the same value, so the band is not redrawn and its rings do not
+  // fill again.
+  await update($, usageAtom, previous => (JSON.stringify(previous) === JSON.stringify(snap) ? previous : snap))
 }
 
 async function commit($: EngineInterface, state: DesignState): Promise<void> {
@@ -395,6 +403,7 @@ reply width: ${lastColumns} columns`
     return settingsPane(look, ui, { names: skinNames(custom), editing, width: e.props.bodyColumns }, {
       pick: name => void commit($, { ...state, prefs: { ...prefs, skin: name } }),
       toggle: word => void commit($, { ...state, prefs: { ...prefs, [TOGGLES[word]]: !prefs[TOGGLES[word]] } }),
+      tables: () => void commit($, { ...state, prefs: { ...prefs, tables: nextTables(prefs.tables) } }),
       icons: () =>
         void commit($, { ...state, prefs: { ...prefs, icons: prefs.icons === 'unicode' ? 'ascii' : 'unicode' } }),
       edit: slot => void update($, editingAtom, () => slot),
@@ -458,7 +467,7 @@ reply width: ${lastColumns} columns`
     const copy = (text: string) => {
       void $.ui.copy({ text, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
-    const look = active === null ? undefined : lookOf($.ui.resolve(e), active, e.surface, copy)
+    const look = active === null ? undefined : { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }
     const columns = e.viewport?.columns ?? 100
 
     // The desktop gets cards: a diff for an edit, a terminal for a shell command.
@@ -509,25 +518,31 @@ reply width: ${lastColumns} columns`
 
     const text = e.props.text
 
-    if (active === null || !active.prefs.tables || !/\||```|~~~/.test(text)) {
+    if (active === null || active.prefs.tables === 'off' || !/\||```|~~~/.test(text)) {
       return next(e)
     }
 
     const segments = splitReply(text)
     const fits = segments.every(segment => segment.kind === 'table' || (segment.kind === 'text' ? segment.text : segment.raw).length <= MAX_MARKDOWN)
 
-    if (!fits || !segments.some(segment => segment.kind !== 'text')) {
+    // Off the terminal a shell fence keeps the app's drawing, for its Run button; a reply
+    // with nothing else to draw is left to the app whole.
+    const drawn = e.surface === 'terminal' ? segments : segments.filter(segment => !isShell(segment))
+
+    if (!fits || !drawn.some(segment => segment.kind !== 'text')) {
       return next(e)
     }
 
-    // Every surface's table names Svg, but the terminal draws it as nothing.
+    // Every surface's table names Svg, but the terminal draws it as nothing. As text, tables
+    // are text grids and code the app's own selectable blocks.
     const ui = $.ui.resolve(e)
+    const svg = e.surface !== 'terminal' && active.prefs.tables === 'on' && 'Svg' in ui ? ui.Svg : undefined
     lastColumns = e.viewport?.columns
     const copy = (copied: string) => {
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    return replyRows(lookOf(ui, active, e.surface, copy), segments, e.viewport?.columns ?? 100, e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : undefined)
+    return replyRows({ ...lookOf(ui, active, e.surface, copy), isFirstDraw: drawnOnce(e.requestId) }, segments, e.viewport?.columns ?? 100, svg)
   })
 
   // The terminal's spinner gets the skin's word with a shimmer; the desktop's keeps its

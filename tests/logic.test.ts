@@ -176,6 +176,16 @@ test('stored prefs that are stale or hand-edited fall back to defaults', async (
   expect(parsePrefs({ skin: 'off', rail: false }, NAMES).rail).toBe(false)
 })
 
+test('tables are on, text or off, and a stored on/off from before still reads', async () => {
+  expect(parsePrefs({ tables: true }, NAMES).tables).toBe('on')
+  expect(parsePrefs({ tables: false }, NAMES).tables).toBe('off')
+  expect(parsePrefs({ tables: 'text' }, NAMES).tables).toBe('text')
+  expect(parsePrefs({ tables: 'grid' }, NAMES).tables).toBe('on')
+  expect(runSkinCommand('tables text', DEFAULT_PREFS, NAMES).prefs.tables).toBe('text')
+  expect(runSkinCommand('tables maybe', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin tables on|text|off')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, tables: 'text' }, NAMES).message).toContain('tables text')
+})
+
 test('cells are read as colours, diffs, numbers, code or text', async () => {
   expect(kindOfCell('#7aa2f7')).toBe('colour')
   expect(kindOfCell('+18 −3')).toBe('diff')
