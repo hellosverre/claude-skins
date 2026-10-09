@@ -67,7 +67,7 @@ const runSkin = ($: Engine, args: string) =>
 // The engine's own answers, so a hook can mount without a session. A test answering
 // the environment or the store itself leaves them out.
 function stubEngine(on: On, own: { env?: boolean; store?: boolean; toast?: boolean } = {}) {
-  mock.clock(on, { now: 10_000 })
+  const clock = mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   if (!own.env) {
     on('env.get', () => ({ value: undefined }))
@@ -84,6 +84,8 @@ function stubEngine(on: On, own: { env?: boolean; store?: boolean; toast?: boole
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 18 }] } }))
   // The dialog must hold Claude Code's own drawing, which a real engine hands back by reference.
   on('ui.render', ($, e) => (e.component === 'AskUserQuestion' ? { type: 'engine', ref: 0 } : STOCK))
+
+  return clock
 }
 
 const toolUse = (props: ReturnType<typeof call>, surface: (typeof SURFACES)[number] = 'terminal') =>
@@ -625,6 +627,46 @@ test('an auto theme follows the system, and SKINS_THEME overrides the setting', 
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
   const dark = await $.ui.mount({ ...toolUse(call('Bash', { command: 'ls' })), requestId: 'again' })
   expect(spanColor(await dark.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
+})
+
+test('a theme set mid-session is drawn at once, though the settings list still holds the old one', async ($, on) => {
+  stubEngine(on)
+  // Inside the config.set hook the engine still lists the previous value.
+  on('config.list', () => ({ value: [{ ...THEME_AUTO[0], value: 'light' }] as never }))
+  on('config.set', ($, e) => ({ value: e.value }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await $.config.set({ key: 'theme', value: 'dark' })
+
+  const row = await $.ui.mount(toolUse(call('Bash', { command: 'ls' })))
+  expect(spanColor(await row.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
+})
+
+test('an auto theme follows the system when it changes mid-session', async ($, on) => {
+  let isDark = false
+  const clock = stubEngine(on)
+  on('config.list', () => ({ value: THEME_AUTO as never }))
+  on('process.run', () => ({
+    value: (isDark
+      ? { exitCode: 0, stdout: 'Dark\n', stderr: '' }
+      : { exitCode: 1, stdout: '', stderr: 'The domain/default pair does not exist' }) as never,
+  }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  const before = await $.ui.mount(toolUse(call('Bash', { command: 'ls' })))
+  expect(spanColor(await before.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#111111')
+
+  isDark = true
+  await clock.advance(5000)
+
+  const after = await $.ui.mount({ ...toolUse(call('Bash', { command: 'ls' })), requestId: 'after' })
+  expect(spanColor(await after.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
 })
 
 test('/skin pin keeps a look to this folder, /skin unpin returns to the default', async ($, on) => {

@@ -39,6 +39,8 @@ const CLIP_HEAD = 8
 const CLIP_TAIL = 4
 const FRAME_MS = 90
 const KEPT_TURNS = 40
+// How often an `auto` theme asks the system again: nothing tells a plugin it changed.
+const APPEARANCE_MS = 5000
 
 const prefsAtom = atom({ plugin: 'skins', key: 'prefs' } as const, DEFAULT_PREFS)
 const customAtom = atom({ plugin: 'skins', key: 'custom' } as const, {})
@@ -94,18 +96,41 @@ async function systemDark($: EngineInterface): Promise<boolean | undefined> {
 
 // Claude Code's own theme decides whether skins draw for a light or a dark background:
 // `SKINS_THEME` first, then the theme setting, and for `auto` the terminal and the system.
-async function refreshTheme($: EngineInterface): Promise<void> {
-  const rows = await $.config.list()
+// `theme` is a value just written, which `$.config.list()` does not answer with yet.
+// Resolves true when the answer came from the system's appearance, which can change under it.
+async function refreshTheme($: EngineInterface, theme?: unknown): Promise<boolean> {
   const hints = {
     override: await $.env.get('SKINS_THEME'),
-    theme: rows.find(row => row.key === 'theme')?.value,
+    theme: theme ?? (await $.config.list()).find(row => row.key === 'theme')?.value,
     colorfgbg: await $.env.get('COLORFGBG'),
   }
   // Asks the system only when nothing before it decided.
   const needsSystem = resolveLight(hints) !== resolveLight({ ...hints, systemDark: false })
-  const isLight = resolveLight({ ...hints, systemDark: needsSystem ? await systemDark($) : undefined })
+  const dark = needsSystem ? await systemDark($) : undefined
+  const isLight = resolveLight({ ...hints, systemDark: dark })
 
-  await update($, lightAtom, () => isLight)
+  // A write redraws every row, and the system is asked again every few seconds.
+  if ((await read($, lightAtom)) !== isLight) {
+    await update($, lightAtom, () => isLight)
+  }
+
+  return dark !== undefined
+}
+
+// Asks the system again on a timer while the theme follows it; any other theme stops it.
+let appearance: Timer | undefined
+
+async function followTheme($: EngineInterface, theme?: unknown): Promise<void> {
+  const followsSystem = await refreshTheme($, theme)
+
+  appearance?.cancel()
+  appearance = followsSystem
+    ? $.clock.every(APPEARANCE_MS, () => {
+        void refreshTheme($).catch((error: unknown) => {
+          $.ui.log(error instanceof Error ? error.message : String(error), { to: 'debug' })
+        })
+      })
+    : undefined
 }
 
 // Every surface's element table names Svg, but the terminal draws it as nothing, so
@@ -265,7 +290,7 @@ export const register: Register = on => {
     })
     await load($)
     await refreshUsage($)
-    await refreshTheme($)
+    await followTheme($)
 
     // Off the start's path: a slow or offline network must not hold the session up.
     void checkForUpdate($).catch((error: unknown) => {
@@ -286,7 +311,7 @@ export const register: Register = on => {
   // /clear, /resume and /branch reset $.state to its defaults and skip session.start.
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
     await load($)
-    await refreshTheme($)
+    await followTheme($)
 
     return next(e)
   })
@@ -303,8 +328,9 @@ export const register: Register = on => {
   on('config.set', async ($, e, next) => {
     const result = await next(e)
 
-    if (e.key === 'theme') {
-      await refreshTheme($)
+    // The written value: inside this hook $.config.list() still answers with the old one.
+    if (e.key === 'theme' && result.deny === undefined) {
+      await followTheme($, result.value)
     }
 
     return result
