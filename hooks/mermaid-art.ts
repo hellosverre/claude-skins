@@ -30,6 +30,8 @@ const KINDS: readonly (readonly [RegExp, string])[] = [
 const MAX_LINES = 80
 const MAX_CHARS = 8000
 const MAX_ROWS = 120
+// The widest gap the renderer leaves between a box and a link starting from it.
+const MAX_GAP = 3
 const CACHE_SIZE = 64
 
 // Colours no theme uses, one per role, so the renderer's HTML output says what each
@@ -109,12 +111,14 @@ function drawArt(source: string, columns: number, ascii: boolean): Art | null {
     : [text]
 
   for (const attempt of attempts) {
-    const grid = render(attempt, kind, room, ascii)
+    const drawn = render(attempt, kind, room, ascii)
 
     // The renderer draws what it cannot read as nothing rather than throwing.
-    if (grid === null || grid.length === 0) {
+    if (drawn === null || drawn.length === 0) {
       return null
     }
+
+    const grid = kind === 'Flowchart' || kind === 'State' ? reattach(drawn) : drawn
 
     if (grid.length <= MAX_ROWS && grid.every(row => widthOf(row.map(cell => cell.char).join('')) <= room)) {
       return { kind, rows: paint(grid, kind) }
@@ -122,6 +126,115 @@ function drawArt(source: string, columns: number, ascii: boolean): Art | null {
   }
 
   return null
+}
+
+const LINE: Cell = { char: '─', role: 'line' }
+const BLANK: Cell = { char: ' ', role: null }
+
+const isGap = (cell: Cell | undefined): boolean => cell?.char === ' '
+const isEdgeLabel = (cell: Cell | undefined): boolean => cell?.role === 'text' && cell.char !== ' '
+
+// Where the renderer loses a link at a box's side, put it back. Three slips, all seen
+// in real replies: a link leaving sideways starts a few cells out from the border; one
+// leaving upward starts on the row inside the border; and a label written next to a box
+// blanks the link's last cells, arrowhead and all.
+function reattach(grid: Cell[][]): Cell[][] {
+  const rows = grid.map(row => row.slice())
+
+  // Read from the renderer's grid, so a junction already moved onto a border is not
+  // moved again.
+  grid.forEach((cells, y) => {
+    const row = rows[y] ?? []
+
+    cells.forEach((cell, x) => {
+      if (cell.char === '├' || cell.char === '┤') {
+        joinSideways(row, x, cell.char === '├' ? -1 : 1)
+      } else if (cell.char === '┴') {
+        joinUpward(rows, x, y)
+      } else if (cell.char === '│' && cell.role === 'border') {
+        rejoinLabel(row, x, 1)
+        rejoinLabel(row, x, -1)
+      }
+    })
+  })
+
+  return rows
+}
+
+// A junction at `x` whose box lies `step` away across a gap: the junction onto the
+// border, the gap filled with line. An incoming arrowhead goes up to the border instead.
+function joinSideways(row: Cell[], x: number, step: -1 | 1): void {
+  let border = x + step
+
+  while (Math.abs(border - x) <= MAX_GAP && isGap(row[border])) {
+    border += step
+  }
+
+  const onBorder = row[border]
+  const onward = row[x - step]?.char ?? ''
+
+  if (border === x + step || onBorder?.char !== '│' || !'─┼◄►'.includes(onward)) {
+    return
+  }
+
+  for (let at = border - step; at !== x - step; at -= step) {
+    row[at] = LINE
+  }
+
+  if (onward === (step < 0 ? '◄' : '►')) {
+    row[x - step] = LINE
+    row[border - step] = { char: onward, role: 'arrow' }
+  } else {
+    row[border] = { ...onBorder, char: step < 0 ? '├' : '┤' }
+  }
+}
+
+// A `┴` alone inside a box, under its top border: the link it starts runs up from the
+// border, so the junction goes there; where an arrowhead already lands on that cell,
+// the arrowhead says enough and the junction goes.
+function joinUpward(rows: Cell[][], x: number, y: number): void {
+  const row = rows[y] ?? []
+  const border = rows[y - 1]?.[x]
+
+  if (border?.char !== '─' || !isGap(row[x - 1]) || !isGap(row[x + 1])) {
+    return
+  }
+
+  if (rows[y - 2]?.[x]?.char === '│') {
+    rows[y - 1]?.splice(x, 1, { ...border, char: '┴' })
+  }
+
+  row[x] = BLANK
+}
+
+// A box border at `x`, a gap, then a label running on into a link: the link's end was
+// blanked by the label, so draw it back to the box with its arrowhead.
+function rejoinLabel(row: Cell[], x: number, step: -1 | 1): void {
+  let label = x + step
+
+  while (Math.abs(label - x) <= MAX_GAP && isGap(row[label])) {
+    label += step
+  }
+
+  if (label === x + step || !isEdgeLabel(row[label])) {
+    return
+  }
+
+  let end = label
+
+  while (isEdgeLabel(row[end])) {
+    end += step
+  }
+
+  if (row[end]?.role !== 'line') {
+    return
+  }
+
+  row[x + step] = { char: step > 0 ? '◄' : '►', role: 'arrow' }
+
+  for (let at = x + 2 * step; at !== label; at += step) {
+    row[at] = LINE
+  }
 }
 
 function render(text: string, kind: string, room: number, ascii: boolean): Cell[][] | null {

@@ -467,6 +467,34 @@ test('a Mermaid fence is a chart card on the desktop and a laid-out diagram in t
   await shares.unmount()
 })
 
+const textOf = (node: unknown): string =>
+  typeof node === 'string' ? node : ((node as { children?: readonly unknown[] }).children ?? []).map(textOf).join('')
+
+test('a terminal diagram keeps every link joined to its box', async ($, on) => {
+  stubEngine(on)
+
+  // A retry loop: the renderer alone leaves a junction out from the Pass? box, a stray
+  // one inside Wait, and the retry link short of Test with no arrowhead.
+  const source = [
+    'flowchart TD',
+    '  T[Test] --> P{Pass?}',
+    '  P -->|yes| K[Package]',
+    '  P -->|no| R{Retries?}',
+    '  R -->|yes| W[Wait]',
+    '  R -->|no| F[Failed]',
+    '  W -->|retry| T',
+    '  K --> M{Main?}',
+    '  M -->|no| D[Done]',
+  ].join('\n')
+  const terminal = await $.ui.mount(chartReply('terminal', `\`\`\`mermaid\n${source}\n\`\`\``))
+  const rows = (await terminal.findAll({ type: 'Text' })).map(textOf)
+
+  expect(rows.some(row => row.includes('Pass?  ├────'))).toBe(true)
+  expect(rows.some(row => row.includes('Test  │◄──retry┐'))).toBe(true)
+  expect(rows.some(row => /│ {1,3}[├┤]|[├┤] {1,3}│|│ +┴ +│/.test(row))).toBe(false)
+  await terminal.unmount()
+})
+
 test('a diagram too wide for the terminal falls back to rows, one nothing can read to its code', async ($, on) => {
   stubEngine(on)
 
