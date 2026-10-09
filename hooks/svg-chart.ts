@@ -1,25 +1,21 @@
 import { chartHeading, formatPercent, formatValue, niceStep, seriesName } from './mermaid'
-import type { Chart, Flow, FlowEdge, FlowNode, Pie, Shape, XyChart } from './mermaid'
+import type { Chart, Flow, FlowEdge, FlowNode, MindNode, Pie, Shape, XyChart } from './mermaid'
 import type { Palette, Slot } from './skin'
+import { HEADER_H, PAD, seriesColor } from './svg-chart-kit'
+import type { Body } from './svg-chart-kit'
+import { ganttBody, journeyBody, kanbanBody, timelineBody } from './svg-chart-plan'
+import { gitBody, mindmapBody, quadrantBody, radarBody, sankeyBody } from './svg-chart-shape'
 import { CONTROL_SLOT, escape, fitText, HEADER_MID, measure, riseDelay, svgCard } from './svg-kit'
 
 // A Mermaid fence drawn as a card in the same shell as code and tables: the kind and
-// title in a header, then the flowchart, bars, lines or donut in the skin's colours.
-
-const HEADER_H = 56
-const PAD = 24
+// title in a header, then the drawing in the skin's colours.
 
 type Built = { source: string; width: number; height: number; alt: string }
-
-// Series and slices take the skin's accent slots in this order.
-const SERIES: readonly Slot[] = ['user', 'read', 'ok', 'warn', 'web', 'mcp', 'search', 'err']
-
-const seriesColor = (palette: Palette, i: number): string => palette[SERIES[i % SERIES.length] ?? 'user']
 
 function header(chart: Chart, palette: Palette, width: number, hasControl: boolean): string {
   const { kind, count } = chartHeading(chart)
   const label = kind.toUpperCase()
-  const title = chart.kind === 'flow' ? '' : chart.title
+  const title = chart.title
   const titleX = 16 + measure(label, false, 11) * 1.15 + 12
   const right = width - 16 - (hasControl ? CONTROL_SLOT : 0)
   const room = right - titleX - measure(count, false, 11) - 16
@@ -35,7 +31,7 @@ function header(chart: Chart, palette: Palette, width: number, hasControl: boole
 // Null when the chart cannot be drawn legibly at this width; the fence then keeps its
 // code card.
 export function chartSvg(chart: Chart, palette: Palette, width: number, hasControl = false): Built | null {
-  const drawn = chart.kind === 'flow' ? flowBody(chart, palette, width) : chart.kind === 'xy' ? xyBody(chart, palette, width) : pieBody(chart, palette, width)
+  const drawn = bodyOf(chart, palette, width)
 
   if (drawn === null) {
     return null
@@ -48,6 +44,39 @@ export function chartSvg(chart: Chart, palette: Palette, width: number, hasContr
     alt: altOf(chart),
   }
 }
+
+function bodyOf(chart: Chart, palette: Palette, width: number): Body | null {
+  switch (chart.kind) {
+    case 'flow':
+      return flowBody(chart, palette, width)
+    case 'xy':
+      return xyBody(chart, palette, width)
+    case 'pie':
+      return pieBody(chart, palette, width)
+    case 'gantt':
+      return ganttBody(chart, palette, width)
+    case 'timeline':
+      return timelineBody(chart, palette, width)
+    case 'journey':
+      return journeyBody(chart, palette, width)
+    case 'kanban':
+      return kanbanBody(chart, palette, width)
+    case 'mindmap':
+      return mindmapBody(chart, palette, width)
+    case 'quadrant':
+      return quadrantBody(chart, palette, width)
+    case 'radar':
+      return radarBody(chart, palette, width)
+    case 'sankey':
+      return sankeyBody(chart, palette, width)
+    case 'git':
+      return gitBody(chart, palette, width)
+  }
+}
+
+const titled = (kind: string, title: string): string => `${kind}${title === '' ? '' : `: ${title}`}`
+
+const mindLines = (node: MindNode, depth: number): string[] => [`${'  '.repeat(depth)}${node.label}`, ...node.children.flatMap(child => mindLines(child, depth + 1))]
 
 function altOf(chart: Chart): string {
   const label = (flow: Flow, id: string) => flow.nodes.find(node => node.id === id)?.label ?? id
@@ -65,6 +94,24 @@ function altOf(chart: Chart): string {
 
       return [`Pie${chart.title === '' ? '' : `: ${chart.title}`}`, ...chart.slices.map(slice => `${slice.label}: ${formatValue(slice.value)} (${Math.round((slice.value / total) * 100)}%)`)].join('\n')
     }
+    case 'gantt':
+      return [titled('Gantt', chart.title), ...chart.tasks.map(task => `${task.label}: ${new Date(task.start).toISOString().slice(0, 10)} to ${new Date(task.end).toISOString().slice(0, 10)}${task.done ? ' (done)' : task.active ? ' (active)' : ''}`)].join('\n')
+    case 'timeline':
+      return [titled('Timeline', chart.title), ...chart.periods.map(period => `${period.label}: ${period.events.join(', ')}`)].join('\n')
+    case 'journey':
+      return [titled('Journey', chart.title), ...chart.steps.map(step => `${step.label}: ${step.score}/5`)].join('\n')
+    case 'kanban':
+      return [titled('Kanban', chart.title), ...chart.columns.map(column => `${column.label}: ${column.cards.map(card => card.label).join(', ') || 'empty'}`)].join('\n')
+    case 'mindmap':
+      return [titled('Mindmap', chart.title), ...mindLines(chart.root, 0)].join('\n')
+    case 'quadrant':
+      return [titled('Quadrant chart', chart.title), ...chart.points.map(point => `${point.label}: ${point.x.toFixed(2)}, ${point.y.toFixed(2)}`)].join('\n')
+    case 'radar':
+      return [titled('Radar', chart.title), ...chart.curves.map(curve => `${curve.label || curve.id}: ${chart.axes.map((axis, i) => `${axis.label} ${formatValue(curve.values[i] ?? 0)}`).join(', ')}`)].join('\n')
+    case 'sankey':
+      return [titled('Sankey', chart.title), ...chart.links.map(link => `${link.from} → ${link.to}: ${formatValue(link.value)}`)].join('\n')
+    case 'git':
+      return [titled('Git graph', chart.title), ...chart.commits.map(commit => `${commit.branch}: ${commit.shown || commit.id}${commit.tag === '' ? '' : ` [${commit.tag}]`}`)].join('\n')
   }
 }
 
@@ -200,7 +247,7 @@ function edgeSvg(edge: FlowEdge, from: Placed, to: Placed, isDown: boolean, isBa
   return `<path d="${path}" ${stroke}${edge.isArrow ? ` marker-end="url(#${marker})"` : ''}/>${label}`
 }
 
-function flowBody(flow: Flow, palette: Palette, width: number): { body: string; height: number } | null {
+function flowBody(flow: Flow, palette: Palette, width: number): Body | null {
   const right = flow.direction === 'right' ? placeRight(flow, width) : null
   const placed = right ?? placeDown(flow, width)
 
@@ -235,7 +282,7 @@ function flowBody(flow: Flow, palette: Palette, width: number): { body: string; 
 
 const PLOT_H = 200
 
-function xyBody(chart: XyChart, palette: Palette, width: number): { body: string; height: number } {
+function xyBody(chart: XyChart, palette: Palette, width: number): Body {
   const step = niceStep(chart.max - chart.min)
   const ticks: number[] = []
 
@@ -346,7 +393,7 @@ const polar = (cx: number, cy: number, r: number, turn: number): string => {
   return `${(cx + r * Math.cos(angle)).toFixed(2)} ${(cy + r * Math.sin(angle)).toFixed(2)}`
 }
 
-function pieBody(pie: Pie, palette: Palette, width: number): { body: string; height: number } {
+function pieBody(pie: Pie, palette: Palette, width: number): Body {
   const total = pie.slices.reduce((sum, slice) => sum + slice.value, 0)
   const legendH = pie.slices.length * LEGEND_ROW
   const cx = PAD + OUTER
