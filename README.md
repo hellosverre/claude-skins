@@ -44,6 +44,9 @@ Needs Claude Code 2.1.287 or later, in a terminal or the desktop app's Code tab.
 /plugin install skins@hellosverre-mods
 ```
 
+Once a day, at session start, skins checks this repo for a newer release and shows a toast
+with the update command when you are behind.
+
 ## What it redraws
 
 | Site | Desktop app | Terminal |

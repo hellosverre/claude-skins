@@ -22,6 +22,8 @@ import { shellOutputOf } from './svg-terminal'
 import { limitLabel, metersOf } from './svg-usage'
 import { shortenPath } from './format'
 import { kindOf, summarize } from './tools'
+import { isDue, isNewer, LATEST_URL, updateNotice, versionOf } from './updates'
+import type { Checked } from './updates'
 
 const SETTINGS = 'skins-settings'
 const GALLERY = 'skins-gallery'
@@ -206,6 +208,30 @@ async function refreshUsage($: EngineInterface): Promise<void> {
   await update($, usageAtom, previous => (JSON.stringify(previous) === JSON.stringify(snap) ? previous : snap))
 }
 
+async function checkForUpdate($: EngineInterface): Promise<void> {
+  const now = await $.clock.now()
+
+  if (!isDue(await $.store.get('updateCheck'), now)) {
+    return
+  }
+
+  // Stamped before the fetch, so an offline machine is not asked again every session.
+  await $.store.set('updateCheck', { at: now } satisfies Checked)
+
+  const current = versionOf(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`))
+  const response = await $.http.fetch(LATEST_URL)
+
+  if (!response.ok) {
+    throw new Error(`update check: ${LATEST_URL} answered ${response.status}`)
+  }
+
+  const latest = versionOf(response.text)
+
+  if (current !== undefined && latest !== undefined && isNewer(latest, current)) {
+    $.ui.toast(updateNotice(latest, current), { timeoutMs: 12_000 })
+  }
+}
+
 async function commit($: EngineInterface, state: DesignState): Promise<void> {
   await update($, customAtom, () => state.custom)
   await update($, prefsAtom, () => state.prefs)
@@ -240,6 +266,11 @@ export const register: Register = on => {
     await load($)
     await refreshUsage($)
     await refreshTheme($)
+
+    // Off the start's path: a slow or offline network must not hold the session up.
+    void checkForUpdate($).catch((error: unknown) => {
+      $.ui.log(error instanceof Error ? error.message : String(error), { to: 'debug' })
+    })
 
     // Only the spinner reads the frame, so a tick redraws the spinner and nothing else.
     ticker?.cancel()

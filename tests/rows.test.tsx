@@ -66,7 +66,7 @@ const runSkin = ($: Engine, args: string) =>
 
 // The engine's own answers, so a hook can mount without a session. A test answering
 // the environment or the store itself leaves them out.
-function stubEngine(on: On, own: { env?: boolean; store?: boolean } = {}) {
+function stubEngine(on: On, own: { env?: boolean; store?: boolean; toast?: boolean } = {}) {
   mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   if (!own.env) {
@@ -76,8 +76,11 @@ function stubEngine(on: On, own: { env?: boolean; store?: boolean } = {}) {
     on('store.get', () => ({ value: undefined }))
     on('store.set', () => ({ value: undefined }))
   }
-  on('ui.toast', () => ({ value: undefined }))
+  if (!own.toast) {
+    on('ui.toast', () => ({ value: undefined }))
+  }
   on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.log', () => ({ value: undefined }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 18 }] } }))
   // The dialog must hold Claude Code's own drawing, which a real engine hands back by reference.
   on('ui.render', ($, e) => (e.component === 'AskUserQuestion' ? { type: 'engine', ref: 0 } : STOCK))
@@ -649,4 +652,45 @@ test('/skin pin keeps a look to this folder, /skin unpin returns to the default'
 
   expect(store.folders).toEqual({})
   expect((store.prefs as { skin: string }).skin).toBe('dracula')
+})
+
+// The update check runs unawaited off session.start; a macrotask lets it finish.
+const unawaited = () =>
+  new Promise<void>(resolve => (globalThis as unknown as { setTimeout: (run: () => void, ms: number) => void }).setTimeout(resolve, 0))
+
+test('a session start says when a newer release is out, at most once a day', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const toasts: string[] = []
+  let latest = '0.1.3'
+  let fetches = 0
+  stubEngine(on, { store: true, toast: true })
+  on('store.get', ($, e) => ({ value: store[e.key] }))
+  on('store.set', ($, e) => {
+    store[e.key] = e.value
+    return { value: undefined }
+  })
+  on('ui.toast', ($, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  // The engine hands the path back in the platform's own separators.
+  on('fs.read', ($, e) => ({ value: /\.claude-plugin[\\/]plugin\.json$/.test(e.path) ? '{ "version": "0.1.2" }' : '' }))
+  on('http.fetch', () => {
+    fetches += 1
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ version: latest }) } as never }
+  })
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+  on('config.list', () => ({ value: [] }))
+
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await unawaited()
+  expect(toasts.filter(text => text.startsWith('skins 0.1.3 is out'))).toHaveLength(1)
+
+  latest = '0.1.4'
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await unawaited()
+  expect(fetches).toBe(1)
+  expect(toasts.some(text => text.includes('0.1.4'))).toBe(false)
 })

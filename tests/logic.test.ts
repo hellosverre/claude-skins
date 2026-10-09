@@ -10,6 +10,7 @@ import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
 import { limitLabel, meterColor, metersOf, usageSvg } from '../hooks/svg-usage'
+import { isNewer, updateNotice } from '../hooks/updates'
 import { deepen, isLightTheme, resolveLight, toLight } from '../hooks/light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
@@ -318,4 +319,15 @@ test('a pinned folder keeps its own prefs, others follow the default', async () 
   expect(prefsFor('/c', folders, DEFAULT_PREFS)).toBe(DEFAULT_PREFS)
   expect(Object.keys(withoutFolder(withFolder(folders, '/c', pinned), '/a'))).toEqual(['/b', '/c'])
   expect(parseFolders('junk', NAMES)).toEqual({})
+})
+
+test('a release is newer by its first differing part, and anything not x.y.z never is', () => {
+  expect(isNewer('0.1.3', '0.1.2')).toBe(true)
+  expect(isNewer('0.2.0', '0.1.9')).toBe(true)
+  expect(isNewer('0.1.10', '0.1.9')).toBe(true)
+  expect(isNewer('0.1.2', '0.1.2')).toBe(false)
+  expect(isNewer('0.1.2', '0.1.3')).toBe(false)
+  expect(isNewer('1.0.0-beta', '0.1.2')).toBe(false)
+  expect(isNewer('0.1.3', 'dev')).toBe(false)
+  expect(updateNotice('0.1.3', '0.1.2')).toBe('skins 0.1.3 is out (you have 0.1.2). Run: claude plugin update skins@hellosverre-mods, then restart')
 })
