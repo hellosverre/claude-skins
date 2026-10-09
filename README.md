@@ -6,7 +6,7 @@ animated cards, shell output in a terminal card, a spinner that shows what Claud
 above the prompt with your context and plan limits and a Compact button. Fifteen skins, light and dark,
 a settings page, and your own agent can design a new skin with you.
 
-<img alt="The same Claude Code turn switching skins with /skin: noir, Tokyo Night, Dracula, Catppuccin" src="docs/demo.gif">
+<img alt="Claude Code switching skins with /skin: a coding turn in Noir and Tokyo Night, then Mermaid chart cards in Dracula (xy chart), Catppuccin (sankey), Rosé Pine (radar) and Gruvbox (treemap)" src="docs/demo.gif">
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/previews/hero-light.svg">
