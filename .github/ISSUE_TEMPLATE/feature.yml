@@ -1,0 +1,40 @@
+name: Idea
+description: A new part to redraw, a new skin, or a setting you want
+labels: ["enhancement", "needs triage"]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What you want
+      description: Describe what it should look like or do. A mockup or a screenshot from another tool helps.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What you are trying to do that skins gets in the way of, or doesn't help with yet.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      multiple: true
+      options:
+        - Tool rows (rail, icons, shimmer)
+        - Tables
+        - Code blocks and diffs
+        - Charts, Mermaid or math
+        - Usage band
+        - Themes and light/dark
+        - /skin commands and settings
+        - Something skins doesn't draw yet
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where you'd use it
+      options:
+        - Terminal (CLI)
+        - Desktop app (Code tab)
+        - Both

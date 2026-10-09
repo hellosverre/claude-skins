@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Install, update and commands
+    url: https://github.com/hellosverre/claude-skins#install
+    about: The README covers installing, updating, /skin off and every command.
