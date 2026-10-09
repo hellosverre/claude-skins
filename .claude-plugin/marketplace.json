@@ -6,7 +6,7 @@
     {
       "name": "skins",
       "source": "./",
-      "description": "Skins for Claude Code's transcript: themed tool rows, reply gutters and spinner words. /skin swaps them live."
+      "description": "Skins for Claude Code: tool rows with icons, diff, table and Mermaid chart cards, a usage band and fifteen themes. /skin swaps them live."
     }
   ]
 }
