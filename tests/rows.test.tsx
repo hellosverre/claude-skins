@@ -67,7 +67,7 @@ const runSkin = ($: Engine, args: string) =>
 // The engine's own answers, so a hook can mount without a session. A test answering
 // the environment or the store itself leaves them out.
 function stubEngine(on: On, own: { env?: boolean; store?: boolean; toast?: boolean } = {}) {
-  mock.clock(on, { now: 10_000 })
+  const clock = mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   if (!own.env) {
     on('env.get', () => ({ value: undefined }))
@@ -80,9 +80,12 @@ function stubEngine(on: On, own: { env?: boolean; store?: boolean; toast?: boole
     on('ui.toast', () => ({ value: undefined }))
   }
   on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.log', () => ({ value: undefined }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 18 }] } }))
   // The dialog must hold Claude Code's own drawing, which a real engine hands back by reference.
   on('ui.render', ($, e) => (e.component === 'AskUserQuestion' ? { type: 'engine', ref: 0 } : STOCK))
+
+  return clock
 }
 
 const toolUse = (props: ReturnType<typeof call>, surface: (typeof SURFACES)[number] = 'terminal') =>
@@ -383,6 +386,71 @@ test('the desktop draws a table as an animated vector card, with a tooltip on a 
   expect(svg?.props.source).toContain('<circle')
   expect(svg?.props.source).toContain('x&lt;y')
   expect(svg?.props.alt).toContain('Skin | Accent | Note')
+})
+
+test('a card animates on its first draw only, so a streaming reply does not flicker', async ($, on) => {
+  stubEngine(on)
+
+  const reply = (requestId: string, text: string) =>
+    ({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId, props: { text, isFirstOfReply: true } }) as const
+  const sourceOf = async (requestId: string, text: string) => {
+    const ui = await $.ui.mount(reply(requestId, text))
+    const source = ((await ui.find({ type: 'Svg' })) as { props: { source: string } } | undefined)?.props.source ?? ''
+
+    await ui.unmount()
+
+    return source
+  }
+  const table = '| a | b |\n|---|---|\n| 1 | 2 |'
+
+  const first = await sourceOf('s1', table)
+  const streamed = await sourceOf('s1', `${table}\n| 3 | 4 |`)
+  const other = await sourceOf('s2', table)
+
+  expect(first).not.toContain('animation:none!important')
+  expect(streamed).toContain('animation:none!important')
+  expect(streamed).toContain('>3<')
+  expect(other).not.toContain('animation:none!important')
+})
+
+test('on the desktop a shell fence keeps the app’s own block, for its Run button', async ($, on) => {
+  stubEngine(on)
+
+  const reply = (requestId: string, text: string) =>
+    ({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId, props: { text, isFirstOfReply: true } }) as const
+
+  const alone = await $.ui.mount(reply('sh1', 'Run:\n\n```bash\npnpm test\n```'))
+  expect(await alone.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  await alone.unmount()
+
+  const mixed = await $.ui.mount(reply('sh2', '| a | b |\n|---|---|\n| 1 | 2 |\n\n```bash\npnpm test\n```'))
+  const markdown = (await mixed.find({ type: 'Markdown', text: 'pnpm test' })) as { props: { text: string } } | undefined
+  expect(markdown?.props.text).toContain('```bash')
+  expect(await mixed.find({ type: 'Svg' })).toBeDefined()
+})
+
+test('with tables as text the desktop gets a text grid and the app’s own code block, both selectable', async ($, on) => {
+  stubEngine(on)
+
+  await runSkin($, 'tables text')
+
+  const ui = await $.ui.mount({
+    ...SITE,
+    surface: 'desktop',
+    component: 'AssistantMessage',
+    requestId: 'tx1',
+    props: { text: '| Route | Limit |\n|---|---|\n| /chat | 60 |\n\n```ts\nconst a = 1\n```', isFirstOfReply: true },
+  })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\/chat/ })).toBeDefined()
+  const code = (await ui.find({ type: 'Markdown', text: 'const a' })) as { props: { text: string } } | undefined
+  expect(code?.props.text).toContain('```ts')
+  await ui.unmount()
+
+  await runSkin($, 'tables off')
+
+  const stock = await $.ui.mount({ ...SITE, surface: 'desktop', component: 'AssistantMessage', requestId: 'tx2', props: { text: '| a |\n|---|\n| 1 |', isFirstOfReply: true } })
+  expect(await stock.find({ type: 'Text', text: 'stock row' })).toBeDefined()
 })
 
 test('on the desktop an edit is a diff card and a shell command a terminal card', async ($, on) => {
@@ -735,6 +803,46 @@ test('an auto theme follows the system, and SKINS_THEME overrides the setting', 
   expect(spanColor(await dark.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
 })
 
+test('a theme set mid-session is drawn at once, though the settings list still holds the old one', async ($, on) => {
+  stubEngine(on)
+  // Inside the config.set hook the engine still lists the previous value.
+  on('config.list', () => ({ value: [{ ...THEME_AUTO[0], value: 'light' }] as never }))
+  on('config.set', ($, e) => ({ value: e.value }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await $.config.set({ key: 'theme', value: 'dark' } as never)
+
+  const row = await $.ui.mount(toolUse(call('Bash', { command: 'ls' })))
+  expect(spanColor(await row.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
+})
+
+test('an auto theme follows the system when it changes mid-session', async ($, on) => {
+  let isDark = false
+  const clock = stubEngine(on)
+  on('config.list', () => ({ value: THEME_AUTO as never }))
+  on('process.run', () => ({
+    value: (isDark
+      ? { exitCode: 0, stdout: 'Dark\n', stderr: '' }
+      : { exitCode: 1, stdout: '', stderr: 'The domain/default pair does not exist' }) as never,
+  }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  const before = await $.ui.mount(toolUse(call('Bash', { command: 'ls' })))
+  expect(spanColor(await before.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#111111')
+
+  isDark = true
+  await clock.advance(5000)
+
+  const after = await $.ui.mount({ ...toolUse(call('Bash', { command: 'ls' })), requestId: 'after' })
+  expect(spanColor(await after.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
+})
+
 test('/skin pin keeps a look to this folder, /skin unpin returns to the default', async ($, on) => {
   const store: Record<string, unknown> = {}
   stubEngine(on, { store: true })
@@ -829,4 +937,45 @@ test('/skin copy copies the last reply and says so, or says there is nothing yet
 
   expect(toasts).toEqual(['Nothing to copy yet', 'Copied the reply', 'Copied the code'])
   expect(copied).toEqual([reply, 'pnpm build'])
+})
+
+// The update check runs unawaited off session.start; a macrotask lets it finish.
+const unawaited = () =>
+  new Promise<void>(resolve => (globalThis as unknown as { setTimeout: (run: () => void, ms: number) => void }).setTimeout(resolve, 0))
+
+test('a session start says when a newer release is out, at most once a day', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const toasts: string[] = []
+  let latest = '0.1.3'
+  let fetches = 0
+  stubEngine(on, { store: true, toast: true })
+  on('store.get', ($, e) => ({ value: store[e.key] }))
+  on('store.set', ($, e) => {
+    store[e.key] = e.value
+    return { value: undefined }
+  })
+  on('ui.toast', ($, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  // The engine hands the path back in the platform's own separators.
+  on('fs.read', ($, e) => ({ value: /\.claude-plugin[\\/]plugin\.json$/.test(e.path) ? '{ "version": "0.1.2" }' : '' }))
+  on('http.fetch', () => {
+    fetches += 1
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ version: latest }) } as never }
+  })
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+  on('config.list', () => ({ value: [] }))
+
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await unawaited()
+  expect(toasts.filter(text => text.startsWith('skins 0.1.3 is out'))).toHaveLength(1)
+
+  latest = '0.1.4'
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await unawaited()
+  expect(fetches).toBe(1)
+  expect(toasts.some(text => text.includes('0.1.4'))).toBe(false)
 })

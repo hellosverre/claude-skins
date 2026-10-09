@@ -1,5 +1,5 @@
 import type { CustomSkin, Prefs } from '../types'
-import { DEFAULT_PREFS } from './command'
+import { DEFAULT_PREFS, tablesOr } from './command'
 import { buildCustom, resolveSkin, SLOT_HELP, skinNames } from './custom'
 import { SKINS } from './themes'
 
@@ -14,7 +14,7 @@ export const DESIGN_TOOL = {
     'palette ({slot: "#rrggbb"}, only the slots to change), spinner (gerunds, like "Brewing"),',
     'done (past tense, like "Brewed"), apply (default true).',
     '"apply" switches to a skin by name, "delete" removes a made one,',
-    '"settings" switches rail, tables, shimmer, band, clip, markdown, quiet, charts (booleans) and icons ("unicode" or "ascii").',
+    '"settings" switches rail, shimmer, band, clip, markdown, quiet, charts (booleans), tables ("on", "text" or "off") and icons ("unicode" or "ascii").',
     'Good skins keep fg and muted readable on a dark background, and surface and zebra one small step off it.',
   ].join(' '),
   inputSchema: {
@@ -32,7 +32,7 @@ export const DESIGN_TOOL = {
         type: 'object',
         properties: {
           rail: { type: 'boolean' },
-          tables: { type: 'boolean' },
+          tables: { enum: [true, false, 'on', 'text', 'off'] },
           shimmer: { type: 'boolean' },
           band: { type: 'boolean' },
           clip: { type: 'boolean' },
@@ -96,7 +96,7 @@ function settings(input: Input, state: DesignState): DesignOutcome {
   const prefs: Prefs = {
     ...state.prefs,
     rail: flag(asked.rail, state.prefs.rail),
-    tables: flag(asked.tables, state.prefs.tables),
+    tables: tablesOr(asked.tables, state.prefs.tables),
     shimmer: flag(asked.shimmer, state.prefs.shimmer),
     band: flag(asked.band, state.prefs.band),
     clipOutput: flag(asked.clip, state.prefs.clipOutput),

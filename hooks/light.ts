@@ -1,3 +1,4 @@
+import type { ProcessRunResult } from 'claude-code'
 import type { Palette, Skin } from './skin'
 
 // Every skin works on a light background too. A skin may carry its own light palette;
@@ -76,3 +77,22 @@ export const resolveLight = (hints: ThemeHints): boolean =>
   named(hints.theme) ??
   terminalLight(hints.colorfgbg) ??
   (hints.systemDark === undefined ? false : !hints.systemDark)
+
+// What a system-appearance probe printed: a reader answers dark, light, or undefined
+// when its output says neither (the setting is missing, the tool failed).
+type ProbeOutput = Pick<ProcessRunResult, 'exitCode' | 'stdout' | 'stderr'>
+
+// `defaults read -g AppleInterfaceStyle`: "Dark", or unset ("does not exist") when light.
+export const macDark = (out: ProbeOutput): boolean | undefined =>
+  out.exitCode === 0 ? out.stdout.trim() === 'Dark' : /does not exist/.test(out.stderr) ? false : undefined
+
+// `reg query ...\Personalize /v AppsUseLightTheme`: 0x0 is dark, 0x1 light.
+export const windowsDark = (out: ProbeOutput): boolean | undefined => {
+  const value = /AppsUseLightTheme\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(out.stdout)?.[1]
+
+  return out.exitCode !== 0 || value === undefined ? undefined : parseInt(value, 16) === 0
+}
+
+// `gsettings get org.gnome.desktop.interface color-scheme`: 'prefer-dark', 'default', ...
+export const gnomeDark = (out: ProbeOutput): boolean | undefined =>
+  out.exitCode === 0 ? out.stdout.includes('dark') : undefined

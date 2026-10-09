@@ -18,6 +18,7 @@ export type SettingsModel = {
 export type SettingsActions = {
   pick: (name: string) => void
   toggle: (word: ToggleWord) => void
+  tables: () => void
   icons: () => void
   edit: (slot: SkinSlot) => void
   paint: (hex: string) => void
@@ -99,7 +100,14 @@ export function settingsPane(look: Look, ui: PaneUi, model: SettingsModel, actio
       <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
         <Text color={palette.muted}>Look</Text>
         {toggle('rail', 'r', prefs.rail)}
-        {toggle('tables', 't', prefs.tables)}
+        <Button
+          key="tables"
+          label={`tables ${prefs.tables}`}
+          hotkey="t"
+          plain
+          dimColor={prefs.tables === 'off'}
+          onPress={() => actions.tables()}
+        />
         {toggle('shimmer', 's', prefs.shimmer)}
         {toggle('band', 'b', prefs.band)}
         {toggle('clip', 'c', prefs.clipOutput)}

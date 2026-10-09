@@ -60,7 +60,14 @@ export const MOTION = [
   '@media (prefers-reduced-motion:reduce){.rise,.card{animation:none;opacity:1}}',
 ].join('')
 
-export const riseDelay = (index: number, stepMs: number, startMs = 80): string =>
+// Every entrance at its end state. The desktop draws each new source as a new image and
+// plays its animation from the start, so a card drawn again (a reply streaming in, a
+// scroll) is drawn settled, or it would fade out and back in on each redraw.
+const SETTLED = '.rise,.card,.row,.rule{animation:none!important;opacity:1!important;stroke-dashoffset:0!important}'
+
+export const settled = (source: string): string => source.replace('</style>', `${SETTLED}</style>`)
+
+export const riseDelay =(index: number, stepMs: number, startMs = 80): string =>
   `style="animation-delay:${startMs + index * stepMs}ms"`
 
 const RADIUS = 12

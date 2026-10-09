@@ -10,7 +10,8 @@ import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
 import { limitLabel, meterColor, metersOf, usageSvg } from '../hooks/svg-usage'
-import { deepen, isLightTheme, resolveLight, toLight } from '../hooks/light'
+import { isNewer, updateNotice } from '../hooks/updates'
+import { deepen, gnomeDark, isLightTheme, macDark, resolveLight, toLight, windowsDark } from '../hooks/light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
 import { SKINS } from '../hooks/themes'
@@ -184,6 +185,16 @@ test('stored prefs that are stale or hand-edited fall back to defaults', async (
   expect(parsePrefs(undefined, NAMES)).toEqual(DEFAULT_PREFS)
   expect(parsePrefs({ skin: 'gone', icons: 'x', rail: 'yes' }, NAMES)).toEqual(DEFAULT_PREFS)
   expect(parsePrefs({ skin: 'off', rail: false }, NAMES).rail).toBe(false)
+})
+
+test('tables are on, text or off, and a stored on/off from before still reads', async () => {
+  expect(parsePrefs({ tables: true }, NAMES).tables).toBe('on')
+  expect(parsePrefs({ tables: false }, NAMES).tables).toBe('off')
+  expect(parsePrefs({ tables: 'text' }, NAMES).tables).toBe('text')
+  expect(parsePrefs({ tables: 'grid' }, NAMES).tables).toBe('on')
+  expect(runSkinCommand('tables text', DEFAULT_PREFS, NAMES).prefs.tables).toBe('text')
+  expect(runSkinCommand('tables maybe', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin tables on|text|off')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, tables: 'text' }, NAMES).message).toContain('tables text')
 })
 
 test('cells are read as colours, diffs, numbers, code or text', async () => {
@@ -969,4 +980,33 @@ test('splitReply can leave tables and turned-down fences as text', async () => {
 
   expect(segments.map(segment => segment.kind)).toEqual(['text', 'code'])
   expect(segments[0]?.kind === 'text' && segments[0].text).toContain('```ts')
+})
+
+test('a release is newer by its first differing part, and anything not x.y.z never is', () => {
+  expect(isNewer('0.1.3', '0.1.2')).toBe(true)
+  expect(isNewer('0.2.0', '0.1.9')).toBe(true)
+  expect(isNewer('0.1.10', '0.1.9')).toBe(true)
+  expect(isNewer('0.1.2', '0.1.2')).toBe(false)
+  expect(isNewer('0.1.2', '0.1.3')).toBe(false)
+  expect(isNewer('1.0.0-beta', '0.1.2')).toBe(false)
+  expect(isNewer('0.1.3', 'dev')).toBe(false)
+  expect(updateNotice('0.1.3', '0.1.2')).toBe('skins 0.1.3 is out (you have 0.1.2). Run: claude plugin update skins@hellosverre-mods, then restart')
+})
+
+test('each system says dark, light, or nothing', async () => {
+  const ran = (exitCode: number, stdout: string, stderr = '') => ({ exitCode, stdout, stderr })
+  const windows = (value: string) =>
+    ran(0, `\r\nHKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\r\n    AppsUseLightTheme    REG_DWORD    ${value}\r\n\r\n`)
+
+  expect(macDark(ran(0, 'Dark\n'))).toBe(true)
+  expect(macDark(ran(1, '', 'The domain/default pair of (kCFPreferencesAnyApplication, AppleInterfaceStyle) does not exist'))).toBe(false)
+  expect(macDark(ran(127, '', 'command not found'))).toBe(undefined)
+
+  expect(windowsDark(windows('0x0'))).toBe(true)
+  expect(windowsDark(windows('0x1'))).toBe(false)
+  expect(windowsDark(ran(1, '', 'ERROR: The system was unable to find the specified registry key or value.'))).toBe(undefined)
+
+  expect(gnomeDark(ran(0, "'prefer-dark'\n"))).toBe(true)
+  expect(gnomeDark(ran(0, "'default'\n"))).toBe(false)
+  expect(gnomeDark(ran(1, '', 'No such schema'))).toBe(undefined)
 })

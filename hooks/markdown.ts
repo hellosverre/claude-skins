@@ -10,6 +10,12 @@ export type Code = { kind: 'code'; lang: string; code: string; raw: string }
 
 export type Segment = { kind: 'text'; text: string } | Table | Code
 
+// Fences the desktop marks runnable with a Run button of its own. A card is an image and
+// cannot carry it, so these keep Claude Code's drawing there.
+const SHELLS = new Set(['bash', 'sh', 'shell', 'zsh', 'fish', 'console', 'powershell', 'pwsh', 'ps1', 'cmd', 'bat'])
+
+export const isShell = (segment: Segment): boolean => segment.kind === 'code' && SHELLS.has(segment.lang)
+
 const SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
 const FENCE = /^\s*(```|~~~)\s*([\w+#.-]*)/
 

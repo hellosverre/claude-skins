@@ -2,7 +2,7 @@ import type { ElementTable, RenderSurface } from 'claude-code'
 
 import type { Prefs, TurnStats } from '../types'
 import { formatDuration, formatMs } from './format'
-import { columnWidths, cutCell } from './markdown'
+import { columnWidths, cutCell, isShell } from './markdown'
 import type { Segment, Table } from './markdown'
 import { splitBlocks } from './blocks'
 import { artRows, chartRows } from './chart-rows'
@@ -18,7 +18,7 @@ import { chartSvg } from './svg-chart'
 import { codeSvg } from './svg-code'
 import { diffSvg } from './svg-diff'
 import type { DiffInput } from './svg-diff'
-import { cardWidth } from './svg-kit'
+import { cardWidth, settled } from './svg-kit'
 import { tableSvg } from './svg-table'
 import { terminalSvg } from './svg-terminal'
 import type { ShellOutput } from './svg-terminal'
@@ -41,6 +41,9 @@ export type Look = {
   svg?: SvgElement
   // Puts text on the clipboard of the surface drawing; absent where nothing can copy.
   copy?: (text: string) => void
+  // True the first time this drawing shows the card by that key; a card drawn again is
+  // drawn settled. Absent, every card animates.
+  isFirstDraw?: (key: string) => boolean
 }
 
 export type Call = {
@@ -333,6 +336,10 @@ export function tableRows(look: Look, table: Table, maxWidth: number, control?: 
   )
 }
 
+// A card's source: animated on its first draw, settled on every draw after it.
+const sourceOf = (look: Look, key: string, source: string): string =>
+  look.isFirstDraw === undefined || look.isFirstDraw(key) ? source : settled(source)
+
 // A card drawn as an image, with its Copy button laid over the top-right corner the card
 // left free. The image cannot be pressed, so the button is a real one on top of it; the
 // box hugs the image so the corner is the card's, not the column's.
@@ -342,7 +349,7 @@ function cardWithCopy(look: Look, Svg: SvgElement, built: { source: string; alt:
 
   return (
     <Box marginY={1} alignSelf="flex-start">
-      <Svg source={built.source} alt={built.alt} width={built.width} height={built.height} />
+      <Svg source={sourceOf(look, key, built.source)} alt={built.alt} width={built.width} height={built.height} />
       {copy === undefined ? (
         ''
       ) : (
@@ -400,6 +407,11 @@ export function replyRows(look: Look, segments: readonly Segment[], maxWidth: nu
           ) : (
             <Markdown text={segment.text} />
           )
+        }
+
+        // A shell fence on the desktop stays the app's own block, which has Run and Copy.
+        if (segment.kind === 'code' && Svg !== undefined && isShell(segment)) {
+          return <Markdown text={segment.raw} />
         }
 
         if (segment.kind === 'code') {
@@ -527,12 +539,12 @@ export function askBand(look: Look, headers: readonly string[]) {
 }
 
 // A vector card in a reply or under a tool row, a line's breath above and below it.
-function card(look: Look, Svg: SvgElement, built: { source: string; alt: string }) {
+function card(look: Look, Svg: SvgElement, built: { source: string; alt: string }, key: string) {
   const { Box } = look.ui
 
   return (
     <Box marginY={1}>
-      <Svg source={built.source} alt={built.alt} />
+      <Svg source={sourceOf(look, key, built.source)} alt={built.alt} />
     </Box>
   )
 }
@@ -549,7 +561,7 @@ function chartCard(look: Look, chart: Chart, source: string, Svg: SvgElement, co
 }
 
 export function diffCard(look: Look, Svg: SvgElement, input: DiffInput, shownPath: string, columns: number) {
-  return card(look, Svg, diffSvg(input, shownPath, look.skin.palette, cardWidth(columns)))
+  return card(look, Svg, diffSvg(input, shownPath, look.skin.palette, cardWidth(columns)), 'diff')
 }
 
 export function terminalCard(look: Look, Svg: SvgElement, output: ShellOutput, isErrored: boolean, columns: number) {
