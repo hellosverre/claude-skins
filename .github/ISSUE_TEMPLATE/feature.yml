@@ -25,6 +25,7 @@ body:
         - Tool rows (rail, icons, shimmer)
         - Tables
         - Code blocks and diffs
+        - Links, copy and folding
         - Charts, Mermaid or math
         - Usage band
         - Themes and light/dark

@@ -3,3 +3,6 @@ contact_links:
   - name: Install, update and commands
     url: https://github.com/hellosverre/claude-skins#install
     about: The README covers installing, updating, /skin off and every command.
+  - name: Roadmap
+    url: https://github.com/hellosverre/claude-skins/blob/main/ROADMAP.md
+    about: What is planned next. Open an Idea to vote for an item or add one.

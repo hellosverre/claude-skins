@@ -144,8 +144,10 @@ return drawn ?? <Markdown text={text} />
 
 ## Compatibility
 
-Checked by hand on Windows (terminal and desktop app, 0.3.0) and run on Linux (terminal, 0.4.0,
-Claude Code 2.1.288). macOS, VS Code and mobile are untested. The surface × OS matrix and
+Checked by hand on Windows (terminal and desktop app, 0.3.0) and run on Linux (terminal, 0.5.0,
+Claude Code 2.1.288, 168 engine tests). [CI](.github/workflows/ci.yml) runs the tests, the
+manifest checks and the type check on Linux, Windows and macOS. macOS, VS Code and mobile have
+not been looked at by hand. The surface × OS matrix and
 render times per row are in [docs/compat.md](docs/compat.md). To measure on your machine:
 
 ```bash
@@ -182,30 +184,36 @@ scripts/bench.sh
 Other mods that change how the transcript looks, from their READMEs on 2026-10-10. Blank means
 the README does not say.
 
-| | skins | [Prismantis](https://github.com/NahumLitvin/prismantis) | [tweakcc](https://github.com/Piebald-AI/tweakcc) | [claude-gfm-render](https://github.com/briangtn/claude-gfm-render) | [ccstatusline](https://github.com/sirmalloc/ccstatusline) |
-|---|---|---|---|---|---|
-| How | Function-hooks plugin | Function-hooks plugin | Patches Claude Code's JavaScript; reapply after each update | Function-hooks mod | Status line command |
-| Claude Code | 2.1.287+ | 2.1.287+ | Verified on 2.1.162 | 2.1.286+ | |
-| Platforms named | Windows by hand, Linux by tests ([compat](docs/compat.md)) | macOS terminal by hand; CI on macOS, Linux, Windows | Windows, macOS, Linux | Terminal and desktop app | Windows guide in its docs |
-| Themes | 15, repaint any colour, or have Claude design one | 15 and `mono`, 20 colour slots | Your own, for Claude Code's whole UI | | Powerline themes |
-| Recolours Claude Code's own UI | No | No | **Yes** | No | No |
-| Tool rows | Icons, timings, rail; open to the input and answer | 4 styles | | No | No |
-| Read-only output hidden | `/skin quiet` | `toolOutput: quiet` | | No | No |
-| Edit diffs | Card on the desktop | Claude Code's own | | No | No |
-| Shell output | Card on both surfaces | Boxed in expanded groups | | No | No |
-| Tables | Card or cell grid | 4 styles, side by side with diagrams | 4 formats | No | No |
-| Mermaid | 17 kinds; sequence, state, class, ER on the terminal only | Flowchart, sequence, state, class, ER, xy; no pie | | Flowchart, sequence, state, class, ER, xy; SVG on the desktop | No |
-| Math | Card on the desktop, stacked cells on the terminal | Typeset image in kitty and Ghostty via RaTeX, text elsewhere | | Not handled | No |
-| Right-to-left text | No | **Hebrew and Arabic** | | | No |
-| Usage meters | Context and plan limits above the prompt | | | No | **Many widgets**, Powerline |
-| Spinner words | The skin's, with a shimmer | | **Your own verbs and animations** | No | No |
-| Copy | Button on cards, `/skin copy` | Buttons, `/prismantis copy`, HTML tables | | | No |
+| | skins | [Prismantis](https://github.com/NahumLitvin/prismantis) | [glint](https://github.com/manikosto/glint) | [tweakcc](https://github.com/Piebald-AI/tweakcc) | [claude-gfm-render](https://github.com/briangtn/claude-gfm-render) | [ccstatusline](https://github.com/sirmalloc/ccstatusline) |
+|---|---|---|---|---|---|---|
+| How | Function-hooks plugin | Function-hooks plugin | Function-hooks plugin, a Prismantis fork | Patches Claude Code's JavaScript; reapply after each update | Function-hooks mod | Status line command |
+| Claude Code | 2.1.287+ | 2.1.287+ | 2.1.289+ | Verified on 2.1.162 | 2.1.286+ | |
+| Platforms named | Windows by hand, Linux by tests; CI on Linux, Windows, macOS ([compat](docs/compat.md)) | macOS terminal by hand; CI on macOS, Linux, Windows | | Windows, macOS, Linux | Terminal and desktop app | Windows guide in its docs |
+| Themes | 15, repaint any colour, or have Claude design one | 15 and `mono`, 20 colour slots | 15 | Your own, for Claude Code's whole UI | | Powerline themes |
+| Recolours Claude Code's own UI | No | No | No | **Yes** | No | No |
+| Tool rows | Icons, timings, rail; **open to the input and answer** | 4 styles | | | No | No |
+| Read-only output hidden | `/skin quiet` | `toolOutput: quiet` | | | No | No |
+| Edit diffs | Card on the desktop; the engine's diff in an opened row on the terminal | Claude Code's own | | | No | No |
+| ` ```diff ` fences | Diff card or numbered rows, `new only` copy | | Numbered, `⧉ new only` | | | No |
+| Shell output | Card on both surfaces, paths, numbers and errors coloured | Boxed in expanded groups | | | No | No |
+| Code highlighting on the terminal | 20 language families in the skin's colours | Prism, two dozen languages | 20+ languages | | | No |
+| Tables | Card or cell grid, side by side with diagrams | 4 styles, side by side with diagrams | | 4 formats | No | No |
+| Mermaid | 17 kinds; sequence, state, class, ER on the terminal only | Flowchart, sequence, state, class, ER, xy; no pie | Flowchart, sequence, xy | | Flowchart, sequence, state, class, ER, xy; SVG on the desktop | No |
+| Math | Card on the desktop, stacked cells on the terminal | Typeset image in kitty and Ghostty via RaTeX, text elsewhere | | | Not handled | No |
+| Links | URLs as OSC 8 links; this turn's files coloured | Links and bare URLs clickable | **URLs and file paths clickable**; changed files coloured; link band | | | No |
+| Long blocks folded | Code, tables, shell output (`/skin fold`) | | Code, lists, tables | | | No |
+| Right-to-left text | No | **Hebrew and Arabic** | Hebrew and Arabic | | | No |
+| Usage meters | Context and plan limits above the prompt | | | | No | **Many widgets**, Powerline |
+| Spinner words | The skin's, with a shimmer | | | **Your own verbs and animations** | No | No |
+| Copy | Cards, tables as markdown or as drawn, `copy reply`, `/skin copy` | Buttons, `/prismantis copy`, HTML tables | Code, tables, diagrams, lists, quotes | | | No |
+| API for other mods | `$.skins.markdown` | `$.prismantis.markdown` | | | | No |
 
 Where they are better: **tweakcc** recolours all of Claude Code, not only what a hook can
-redraw, at the cost of patching the binary. **Prismantis** lays tables and diagrams side by side,
-handles right-to-left text and copies tables as HTML. **ccstatusline** has a far deeper status
-line. **claude-gfm-render** draws sequence and other diagrams as SVG on the desktop, where skins
-falls back to a code card.
+redraw, at the cost of patching the binary. **Prismantis** handles right-to-left text, copies
+tables as HTML and typesets math as images. **glint** makes file paths clickable and keeps a
+band of the last reply's links. **ccstatusline** has a far deeper status line.
+**claude-gfm-render** draws sequence and other diagrams as SVG on the desktop, where skins falls
+back to a code card. What skins plans next is in [ROADMAP.md](ROADMAP.md).
 
 ## Privacy
 

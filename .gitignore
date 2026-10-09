@@ -1,3 +1,4 @@
 .claude/types/
 node_modules/
 bench/render.run.test.tsx
+.claude-plugin/types/
