@@ -7,12 +7,12 @@ import { ganttBody, journeyBody, kanbanBody, timelineBody } from './svg-chart-pl
 import { gitBody, mindmapBody, quadrantBody, radarBody, sankeyBody } from './svg-chart-shape'
 import { packetBody, treemapBody } from './svg-chart-data'
 import { architectureBody, blockBody, c4Body, systemAlt } from './svg-chart-system'
-import { CONTROL_SLOT, escape, fitText, HEADER_MID, measure, riseDelay, svgCard } from './svg-kit'
+import { CONTROL_SLOT, escape, fitText, HEADER_MID, measure, riseDelay, riseEnd, svgCard } from './svg-kit'
 
 // A Mermaid fence drawn as a card in the same shell as code and tables: the kind and
 // title in a header, then the drawing in the skin's colours.
 
-type Built = { source: string; width: number; height: number; alt: string }
+type Built = { source: string; width: number; height: number; alt: string; entranceMs: number }
 
 function header(chart: Chart, palette: Palette, width: number, hasControl: boolean): string {
   const { kind, count } = chartHeading(chart)
@@ -39,11 +39,14 @@ export function chartSvg(chart: Chart, palette: Palette, width: number, hasContr
     return null
   }
 
+  const source = svgCard(width, drawn.height, palette, '', header(chart, palette, width, hasControl) + drawn.body)
+
   return {
-    source: svgCard(width, drawn.height, palette, '', header(chart, palette, width, hasControl) + drawn.body),
+    source,
     width,
     height: drawn.height,
     alt: altOf(chart),
+    entranceMs: riseEnd(source),
   }
 }
 

@@ -85,7 +85,7 @@ export function galleryPane(look: Look, columns: number) {
         : section(
             'Shell output card: ok, failed',
             terminalCard(look, svg, { stdout: 'Test Files  12 passed (12)\n     Tests  148 passed (148)', stderr: '', interrupted: false }, false, width),
-            terminalCard(look, svg, { stdout: '', stderr: 'error TS2322: Type string is not assignable to number', interrupted: false }, true, width),
+            terminalCard(look, svg, { stdout: '', stderr: 'error TS2322: Type string is not assignable to number', interrupted: false }, true, width, 'copy-output-failed'),
           )}
       {svg === undefined
         ? section('Code block, highlighted', codeRows(look, 'ts', CODE))

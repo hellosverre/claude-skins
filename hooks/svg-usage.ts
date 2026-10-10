@@ -6,6 +6,7 @@ import { escape, FONT } from './svg-kit'
 // limit is spent, as rings that fill in when they draw.
 
 const RING_R = 9
+const FILL_MS = 900
 const ITEM_W = 132
 
 export type Meter = { label: string; percent: number }
@@ -36,7 +37,7 @@ export function metersOf(usage: UsageSnap): Meter[] {
 export const meterColor = (percent: number, palette: Palette): string =>
   percent >= 95 ? palette.err : percent >= 80 ? palette.warn : palette.user
 
-export function usageSvg(meters: readonly Meter[], palette: Palette): { source: string; width: number; height: number; alt: string } {
+export function usageSvg(meters: readonly Meter[], palette: Palette): { source: string; width: number; height: number; alt: string; entranceMs: number } {
   const width = meters.length * ITEM_W
   const height = 30
   const circumference = 2 * Math.PI * RING_R
@@ -57,7 +58,7 @@ export function usageSvg(meters: readonly Meter[], palette: Palette): { source: 
 
   const style = [
     `text{font-family:${FONT}}`,
-    '.fill{animation:fill .9s cubic-bezier(.2,.8,.2,1)}',
+    `.fill{animation:fill ${FILL_MS}ms cubic-bezier(.2,.8,.2,1)}`,
     '@keyframes fill{from{stroke-dasharray:0 100}}',
     '@media (prefers-reduced-motion:reduce){.fill{animation:none}}',
   ].join('')
@@ -67,6 +68,7 @@ export function usageSvg(meters: readonly Meter[], palette: Palette): { source: 
     width,
     height,
     alt: meters.map(meter => `${meter.label} ${meter.percent}%`).join(', '),
+    entranceMs: FILL_MS,
   }
 }
 

@@ -7,7 +7,7 @@ import { runDesign } from '../hooks/designer'
 import { clipLines, diffstat, formatDuration, formatMs, pick, shortenPath } from '../hooks/format'
 import { columnWidths, copyOf, cutCell, padCell, splitReply, widthOf } from '../hooks/markdown'
 import { codeSvg, tokenize } from '../hooks/svg-code'
-import { fitText } from '../hooks/svg-kit'
+import { fitText, settled } from '../hooks/svg-kit'
 import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
@@ -23,6 +23,7 @@ import tokyoNight from '../hooks/themes/tokyo-night'
 import { chartHeading, formatPercent, niceStep, parseMermaid, seriesName } from '../hooks/mermaid'
 import type { Architecture, Block, C4, Flow, Gantt, GitGraph, Journey, Kanban, Mindmap, Packet, Pie, Quadrant, Radar, Sankey, Timeline, Treemap, XyChart } from '../hooks/mermaid'
 import { chartSvg } from '../hooks/svg-chart'
+import { mathSvg } from '../hooks/svg-math'
 import { chartArt } from '../hooks/chart-art'
 import { blockBar, dotRule } from '../hooks/chart-rows'
 import { seriesColor } from '../hooks/svg-chart-kit'
@@ -1013,6 +1014,56 @@ test('each system says dark, light, or nothing', async () => {
   expect(gnomeDark(ran(1, '', 'No such schema'))).toBe(undefined)
 })
 
+function animationEndsMs(source: string): number {
+  const timings = new Map(
+    [...source.matchAll(/\.([\w-]+)\{[^}]*?animation:[\w-]+ (\d+)ms([^;}]*)/g)].map(([, name = '', duration = '0', rest = '']) => [
+      name,
+      Number(duration) + Number(/ (\d+)ms/.exec(rest)?.[1] ?? 0),
+    ]),
+  )
+
+  return Math.max(
+    0,
+    ...[...source.matchAll(/<\w+([^>]*)>/g)].map(([, attributes = '']) => {
+      const timing = timings.get(/class="([\w-]+)"/.exec(attributes)?.[1] ?? '')
+
+      return timing === undefined ? 0 : timing + Number(/animation-delay:(\d+)ms/.exec(attributes)?.[1] ?? 0)
+    }),
+  )
+}
+
+test('a card says when its entrance ends, and no entrance lasts past a second', async () => {
+  const many = (count: number) => Array.from({ length: count }, (_, i) => `line ${i}`)
+  const table = (rows: number) => tableSvg({ kind: 'table', header: ['n'], align: ['left'], rows: many(rows).map(line => [line]) }, tokyoNight.palette, 700)
+  const diff = (lines: number) =>
+    diffSvg(hunksOf({ filePath: '/work/a.ts', structuredPatch: [{ oldStart: 1, newStart: 1, lines: many(lines).map(line => `+${line}`) }] })!, 'a.ts', tokyoNight.palette, 700)
+  const shell = (lines: number) => terminalSvg(shellOutputOf({ stdout: many(lines).join('\n'), stderr: '', interrupted: false })!, false, tokyoNight.palette, 700)
+  const cards = {
+    table1: table(1),
+    table5: table(5),
+    table120: table(120),
+    code1: codeSvg('a', 'ts', tokyoNight.palette, 700),
+    code200: codeSvg(many(200).join('\n'), 'ts', tokyoNight.palette, 700),
+    diff2: diff(2),
+    diff100: diff(100),
+    shell0: shell(0),
+    shell100: shell(100),
+    usage: usageSvg([{ label: 'context', percent: 42 }], tokyoNight.palette),
+  }
+
+  for (const [name, card] of Object.entries(cards)) {
+    expect(card.entranceMs, `${name} settles only after its last animation ends`).toBeGreaterThanOrEqual(animationEndsMs(card.source))
+    expect(card.entranceMs, `${name} entrance stays short`).toBeLessThanOrEqual(1000)
+  }
+})
+
+test('a settled usage band keeps its rings full and still', async () => {
+  const source = settled(usageSvg([{ label: 'context', percent: 42 }], tokyoNight.palette).source)
+
+  expect(source).toContain('class="fill"')
+  expect(source).toContain('.fill{animation:none!important')
+})
+
 test('calm saves what it changes and calm off puts exactly that back', () => {
   const mine = { ...DEFAULT_PREFS, rail: false, quiet: false, shimmer: true, skin: 'nord' }
   const calm = withCalm(mine, true)
@@ -1051,4 +1102,19 @@ test('text cut to a width keeps what fits beside the ellipsis, and at least one 
   expect(fitText('short', 4000, true, 12.5)).toBe('short')
   expect(fitText('mmmm', 10, false, 12.5)).toBe('m…')
   expect(fitText('iiii mmmm', 30, false, 10)).toBe('iiii m…')
+})
+
+test('chart and math cards say when their entrance ends', async () => {
+  const flow = parseMermaid('flowchart TD\n  A[Start] --> B{Ok?}\n  B -->|yes| C([Done])\n  B -. no .-> A')
+  const bars = parseMermaid(`xychart-beta\n  x-axis [${Array.from({ length: 30 }, (_, i) => `m${i}`).join(', ')}]\n  bar [${Array.from({ length: 30 }, (_, i) => i + 1).join(', ')}]`)
+  const cards = {
+    flow: flow === null ? null : chartSvg(flow, tokyoNight.palette, 700),
+    bars: bars === null ? null : chartSvg(bars, tokyoNight.palette, 700),
+    math: mathSvg('\\sqrt{\\frac{a}{b}} = x^2', tokyoNight.palette, 700),
+  }
+
+  for (const [name, card] of Object.entries(cards)) {
+    expect(card, `${name} draws`).not.toBeNull()
+    expect(card?.entranceMs ?? 0, `${name} settles only after its last animation ends`).toBeGreaterThanOrEqual(animationEndsMs(card?.source ?? ''))
+  }
 })

@@ -45,6 +45,10 @@ const MAX_PROMPT = 4000
 const CLIP_HEAD = 8
 const CLIP_TAIL = 4
 const FRAME_MS = 90
+const SETTLE_LEAD_MS = FRAME_MS
+const FAST_RETRIES = 4
+const RETRY_MAX_MS = 1000
+const STALE_AHEAD_MS = RETRY_MAX_MS + 1000
 const KEPT_TURNS = 40
 // How often an `auto` theme asks the system again: nothing tells a plugin it changed.
 const APPEARANCE_MS = 5000
@@ -64,6 +68,7 @@ const commandAtom = atom({ plugin: 'skins', key: 'command' } as const, '')
 const usageAtom = atom({ plugin: 'skins', key: 'usage' } as const, { context: null, limits: [] } as UsageSnap)
 const compactingAtom = atom({ plugin: 'skins', key: 'compacting' } as const, false)
 const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
+const settleAtom = atom({ plugin: 'skins', key: 'settle' } as const, 0)
 // Whether each tool row is open, as the person left it; `auto` opens a failed call.
 const disclosureAtom = atom({ plugin: 'skins', key: 'disclosure' } as const, 'auto' as Disclosure)
 // Whether an opened row shows its answer whole, past the fold.
@@ -248,9 +253,85 @@ async function readHyperlinks($: EngineInterface): Promise<void> {
 // A drawing's cards animate on their first draw only, keyed by the drawing's instance
 // (the message id, the tool_use_id) so two replies never share a card.
 const seenCards = sightings()
-const drawnOnce = (instance: string) => (key: string) => seenCards(`${instance}:${key}`)
+const settling = new Map<string, { at: number; cards: string[] }>()
+let settlingNow = new Set<string>()
+let refusals = 0
+
+const drawingOf = (e: { surface: RenderSurface; requestId: string }): string => `${e.surface}:${e.requestId}`
+
+const drawnBy = (drawing: string, drawnAt: number) => (key: string, entranceMs: number) => {
+  const card = `${drawing}:${key}`
+
+  if (settlingNow.delete(card)) {
+    seenCards(card)
+
+    return false
+  }
+
+  const isFirst = seenCards(card)
+
+  if (isFirst) {
+    const pending = settling.get(drawing)
+
+    settling.set(drawing, {
+      at: Math.max(pending?.at ?? 0, drawnAt + entranceMs - SETTLE_LEAD_MS),
+      cards: [...(pending?.cards ?? []), card],
+    })
+  }
+
+  return isFirst
+}
+
 // Calm draws every card settled, its first draw included.
-const firstDraws = (prefs: Prefs, instance: string) => (prefs.calm === null ? drawnOnce(instance) : () => false)
+async function firstDraws($: EngineInterface, e: { surface: RenderSurface; requestId: string }, prefs: Prefs): Promise<(key: string, entranceMs: number) => boolean> {
+  const drawing = drawingOf(e)
+  settling.delete(drawing)
+
+  return prefs.calm === null ? drawnBy(drawing, await $.clock.now()) : () => false
+}
+
+async function withSettle<T>($: EngineInterface, e: { surface: RenderSurface; requestId: string }, drawn: T): Promise<T> {
+  if (settling.has(drawingOf(e))) {
+    await read($, settleAtom)
+  }
+
+  return drawn
+}
+
+async function settleEntrances($: EngineInterface, isForced = false): Promise<boolean> {
+  const now = await $.clock.now()
+  const isDue = (at: number): boolean => at <= now || at > now + STALE_AHEAD_MS
+
+  if (settling.size === 0 || (!isForced && ![...settling.values()].some(pending => isDue(pending.at)))) {
+    return true
+  }
+
+  const moved = [...settling]
+  settlingNow = new Set(moved.flatMap(([, pending]) => pending.cards))
+  settling.clear()
+
+  return update($, settleAtom, round => round + 1).then(
+    () => {
+      refusals = 0
+
+      return true
+    },
+    (error: unknown) => {
+      refusals += 1
+      const retryAt = now + Math.min(RETRY_MAX_MS, refusals <= FAST_RETRIES ? 0 : FRAME_MS * 2 ** (refusals - FAST_RETRIES))
+
+      for (const [drawing, pending] of moved) {
+        if (!settling.has(drawing)) {
+          settling.set(drawing, { ...pending, at: retryAt })
+        }
+      }
+
+      $.ui.log(`settle: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' })
+
+      return false
+    },
+  )
+}
 
 // Made skins from the store, each checked again: the store may hold an older shape.
 function parseCustom(raw: unknown): Record<string, CustomSkin> {
@@ -330,9 +411,12 @@ async function refreshUsage($: EngineInterface): Promise<void> {
     limits: usage.rateLimits.map(limit => ({ label: limitLabel(limit.kind), percent: limit.percentUsed })),
   }
 
-  // The same numbers keep the same value, so the band is not redrawn and its rings do not
-  // fill again.
-  await update($, usageAtom, previous => (JSON.stringify(previous) === JSON.stringify(snap) ? previous : snap))
+  if (JSON.stringify(metersOf(await read($, usageAtom))) === JSON.stringify(metersOf(snap))) {
+    return
+  }
+
+  await settleEntrances($, true)
+  await update($, usageAtom, () => snap)
 }
 
 async function checkForUpdate($: EngineInterface): Promise<void> {
@@ -439,6 +523,10 @@ export const register: Register = on => {
       if (isWorking) {
         void update($, frameAtom, frame => frame + 1)
       }
+
+      if (settling.size > 0) {
+        void settleEntrances($)
+      }
     })
 
     return next(e)
@@ -448,6 +536,15 @@ export const register: Register = on => {
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
     await load($)
     await followTheme($)
+
+    return next(e)
+  })
+
+  on('ui.invalidate', async ($, e, next) => {
+    if (e.event === 'ui.render' && !(await settleEntrances($, true)) && refusals <= FAST_RETRIES) {
+      await $.clock.sleep(FRAME_MS / 3)
+      await settleEntrances($, true)
+    }
 
     return next(e)
   })
@@ -665,7 +762,9 @@ reply width: ${lastColumns} columns`
       return <ui.Text>The gallery shows a skin. Pick one with /skin first.</ui.Text>
     }
 
-    return galleryPane(lookOf(ui, active, e.surface), e.props.bodyColumns)
+    const look = lookOf(ui, active, e.surface)
+
+    return withSettle($, e, galleryPane({ ...look, ...(look.svg === undefined ? {} : { isFirstDraw: await firstDraws($, e, active.prefs) }) }, e.props.bodyColumns))
   })
 
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
@@ -677,7 +776,7 @@ reply width: ${lastColumns} columns`
     }
 
     const cwd = await cwdOf($)
-    const ms = await read($, memberOf(durationAtom, e))
+    const ms = e.props.isRunning ? -1 : await read($, memberOf(durationAtom, e))
     const diff = diffstat(e.props.output)
     const target = summarize(e.props.tool, e.props.input, cwd)
 
@@ -693,11 +792,12 @@ reply width: ${lastColumns} columns`
     // The chevron opens the row onto the call's input and its answer.
     const disclosure = memberOf(disclosureAtom, e)
     const open = isOpen(await read($, disclosure), e.props.isErrored)
-    const look = await sessionLook($, e, { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }, {
+    const base = await sessionLook($, e, lookOf($.ui.resolve(e), active, e.surface, copy), {
       touched: typeof path === 'string',
       folds: open,
       cwd,
     })
+    const look = base.svg === undefined ? base : { ...base, isFirstDraw: await firstDraws($, e, active.prefs) }
     // A file this turn made or changed keeps its colour in every row that names it.
     const touch = typeof path === 'string' && look.touched !== undefined ? touchOf(look.touched.files, path, cwd) : undefined
     const label = active.prefs.quiet && isQuiet(e.props.tool, e.props.input) ? quietLabel(e.props.tool) : toolLabel(e.props.tool)
@@ -705,7 +805,7 @@ reply width: ${lastColumns} columns`
     const toggle = () => void update($, disclosure, () => (open ? 'closed' : 'open'))
 
     if (!open) {
-      return disclosedRow(look, row, false, toggle)
+      return withSettle($, e, disclosedRow(look, row, false, toggle))
     }
 
     const all = memberOf(allAtom, e)
@@ -722,7 +822,7 @@ reply width: ${lastColumns} columns`
       stock: () => next(e),
     })
 
-    return disclosedRow(look, row, true, toggle, opened)
+    return withSettle($, e, disclosedRow(look, row, true, toggle, opened))
   })
 
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
@@ -743,7 +843,7 @@ reply width: ${lastColumns} columns`
     }
     // Only the terminal's shell card has a fold control here.
     const needs = { folds: e.surface === 'terminal' && SHELLS.has(e.props.tool) }
-    const look = active === null ? undefined : await sessionLook($, e, { ...lookOf($.ui.resolve(e), active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }, needs)
+    const look = active === null ? undefined : await sessionLook($, e, lookOf($.ui.resolve(e), active, e.surface, copy), needs)
     const columns = e.viewport?.columns ?? 100
     // An opened row draws the answer itself; one it cannot draw keeps Claude Code's here.
     const isOpened =
@@ -771,7 +871,9 @@ reply width: ${lastColumns} columns`
       const diff = hunksOf(e.props.output)
 
       if (diff !== null) {
-        return diffCard(look, look.svg, diff, shortenPath(diff.path, await $.session.cwd()), columns)
+        const shown = shortenPath(diff.path, await $.session.cwd())
+
+        return withSettle($, e, diffCard({ ...look, isFirstDraw: await firstDraws($, e, look.prefs) }, look.svg, diff, shown, columns))
       }
     }
 
@@ -781,7 +883,7 @@ reply width: ${lastColumns} columns`
       const shell = shellOutputOf(e.props.output)
 
       if (shell !== null) {
-        return terminalCard(look, look.svg, shell, e.props.isErrored, columns)
+        return withSettle($, e, terminalCard({ ...look, isFirstDraw: await firstDraws($, e, look.prefs) }, look.svg, shell, e.props.isErrored, columns))
       }
     }
 
@@ -866,10 +968,11 @@ reply width: ${lastColumns} columns`
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    const look = await sessionLook($, e, { ...lookOf(ui, active, e.surface, copy), isFirstDraw: firstDraws(prefs, e.requestId) }, replyNeeds(text, segments))
+    const base = await sessionLook($, e, lookOf(ui, active, e.surface, copy), replyNeeds(text, segments))
+    const look = base.svg === undefined ? base : { ...base, isFirstDraw: await firstDraws($, e, prefs) }
 
     // A reply of several blocks can be copied whole, as Claude wrote it.
-    return replyRows(look, segments, e.viewport?.columns ?? 100, svg, segments.length > 1 ? text : undefined)
+    return withSettle($, e, replyRows(look, segments, e.viewport?.columns ?? 100, svg, segments.length > 1 ? text : undefined))
   })
 
   // A slash command's output (`/cost`, `/context`, a plugin's) drawn the way a reply is: its
@@ -894,9 +997,10 @@ reply width: ${lastColumns} columns`
       void $.ui.copy({ text: copied, surface: e.surface }).then(result => $.ui.toast(result.isCopied ? 'Copied' : 'Could not copy here'))
     }
 
-    const look = await sessionLook($, e, { ...lookOf(ui, active, e.surface, copy), isFirstDraw: firstDraws(active.prefs, e.requestId) }, replyNeeds(e.props.text, segments))
+    const base = await sessionLook($, e, lookOf(ui, active, e.surface, copy), replyNeeds(e.props.text, segments))
+    const look = base.svg === undefined ? base : { ...base, isFirstDraw: await firstDraws($, e, active.prefs) }
 
-    return replyRows(look, segments, e.viewport?.columns ?? 100, svg)
+    return withSettle($, e, replyRows(look, segments, e.viewport?.columns ?? 100, svg))
   })
 
   // The terminal's spinner gets the skin's word with a shimmer; the desktop's keeps its
@@ -953,8 +1057,8 @@ reply width: ${lastColumns} columns`
       return next(e)
     }
 
-    const look = lookOf($.ui.resolve(e), active, e.surface)
-    const { Box } = look.ui
+    const plain = lookOf($.ui.resolve(e), active, e.surface)
+    const { Box } = plain.ui
     const theirs = await next(e)
     // Compacting mid-turn would cut the turn's own context out from under it.
     // Runs Claude Code's own /compact, so the person sees its usual progress and result.
@@ -972,12 +1076,15 @@ reply width: ${lastColumns} columns`
           .finally(() => update($, compactingAtom, () => false)),
       )
     }
+    const look = { ...plain, ...(plain.svg === undefined ? {} : { isFirstDraw: await firstDraws($, e, active.prefs) }) }
 
-    return (
+    return withSettle(
+      $,
+      e,
       <Box flexDirection="column">
         {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact)}
         {theirs}
-      </Box>
+      </Box>,
     )
   })
 

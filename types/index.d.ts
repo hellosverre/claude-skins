@@ -117,6 +117,7 @@ declare module 'claude-code' {
       folds: StateFamily<string[]>
       compacting: boolean
       pinned: boolean
+      settle: number
       lastReply: string
     }
   }

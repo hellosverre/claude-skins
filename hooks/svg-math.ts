@@ -1,6 +1,6 @@
 import { gapsOf, linear, parseTex, type Accent, type GridAlign, type MathNode, type Sym } from './math'
 import type { Palette } from './skin'
-import { CONTROL_SLOT, escape, HEADER_MID, svgCard } from './svg-kit'
+import { CONTROL_SLOT, escape, HEADER_MID, riseEnd, svgCard } from './svg-kit'
 
 // A display formula as a card, laid out the way TeX lays out boxes: each part a width,
 // a height above the baseline and a depth below it, set side by side, stacked and
@@ -499,7 +499,7 @@ function layout(node: MathNode, style: Style, colors: Colors): Box {
 }
 
 // `hasControl` leaves the header's right corner free for a Copy button laid over it.
-export function mathSvg(tex: string, palette: Palette, width: number, hasControl = false): { source: string; width: number; height: number; alt: string } {
+export function mathSvg(tex: string, palette: Palette, width: number, hasControl = false): { source: string; width: number; height: number; alt: string; entranceMs: number } {
   const node = parseTex(tex)
   const colors: Colors = { fg: palette.fg, op: palette.user, word: palette.muted }
   const formula = layout(node, { s: SIZE, display: true, script: false }, colors)
@@ -518,5 +518,7 @@ export function mathSvg(tex: string, palette: Palette, width: number, hasControl
   ].join('')
   const body = `<g class="rise" style="animation-delay:80ms"><g font-family="${MATH_FONT}" transform="translate(${round(x)} ${round(y)}) scale(${round(scale)})">${formula.draw(0, 0)}</g></g>`
 
-  return { source: svgCard(cardW, height, palette, '', header + body), width: cardW, height, alt: `math:\n${linear(node)}` }
+  const source = svgCard(cardW, height, palette, '', header + body)
+
+  return { source, width: cardW, height, alt: `math:\n${linear(node)}`, entranceMs: riseEnd(source) }
 }

@@ -1,5 +1,5 @@
 import type { Palette } from './skin'
-import { CONTROL_SLOT, escape, HEADER_MID, fitText, MONO, riseDelay, svgCard, tint } from './svg-kit'
+import { CONTROL_SLOT, escape, HEADER_MID, fitText, MONO, riseDelay, staggerEnd, staggerStep, svgCard, tint } from './svg-kit'
 
 // A fenced code block as a card: the language and line count in a header, line numbers
 // in a gutter, and light highlighting of comments, strings, numbers and keywords.
@@ -71,9 +71,10 @@ function cutTokens(tokens: Token[], max: number): Token[] {
 
 // `hasControl` leaves the header's right corner free for a Copy button laid over it.
 // `maxLines` cuts the card short of its usual 80 lines, for a block folded under it.
-export function codeSvg(code: string, lang: string, palette: Palette, width: number, hasControl = false, maxLines = MAX_LINES): { source: string; width: number; height: number; alt: string } {
+export function codeSvg(code: string, lang: string, palette: Palette, width: number, hasControl = false, maxLines = MAX_LINES): { source: string; width: number; height: number; alt: string; entranceMs: number } {
   const all = code.replace(/\t/g, '  ').split('\n')
   const lines = all.slice(0, maxLines)
+  const step = staggerStep(lines.length, 12)
   const gutter = String(all.length).length * 8 + 24
   const maxChars = Math.floor((width - gutter - 24) / (CODE * 0.6))
   const color: Readonly<Record<Token['role'], string>> = {
@@ -90,7 +91,7 @@ export function codeSvg(code: string, lang: string, palette: Palette, width: num
       .map(token => `<tspan style="fill:${color[token.role]}${token.role === 'keyword' ? ';font-weight:600' : ''}${token.role === 'comment' ? ';font-style:italic' : ''}">${escape(token.text)}</tspan>`)
       .join('')
 
-    return `<g class="rise" ${riseDelay(i, 12, 60)}><text x="${gutter - 12}" y="${top + 14}" text-anchor="end" font-family="${MONO}" font-size="11" style="fill:${palette.muted};fill-opacity:.7">${i + 1}</text><text x="${gutter}" y="${top + 14}" font-family="${MONO}" font-size="${CODE}" xml:space="preserve">${spans}</text></g>`
+    return `<g class="rise" ${riseDelay(i, step, 60)}><text x="${gutter - 12}" y="${top + 14}" text-anchor="end" font-family="${MONO}" font-size="11" style="fill:${palette.muted};fill-opacity:.7">${i + 1}</text><text x="${gutter}" y="${top + 14}" font-family="${MONO}" font-size="${CODE}" xml:space="preserve">${spans}</text></g>`
   })
 
   const hidden = all.length - lines.length
@@ -108,5 +109,6 @@ export function codeSvg(code: string, lang: string, palette: Palette, width: num
     width,
     height,
     alt: `${lang || 'code'}:\n${fitText(code, 4000, true, CODE)}`,
+    entranceMs: staggerEnd(lines.length, step, 60),
   }
 }

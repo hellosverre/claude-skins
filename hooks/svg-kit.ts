@@ -63,10 +63,14 @@ const PX_PER_COLUMN = 6.4
 export const cardWidth = (columns: number, min = 480, max = 1600): number =>
   Math.round(Math.min(max, Math.max(min, columns * PX_PER_COLUMN)))
 
+const RISE_MS = 450
+const FADE_MS = 300
+const STAGGER_BUDGET_MS = 360
+
 // Rows that rise in one after another, honouring reduced motion.
 export const MOTION = [
-  '.rise{opacity:0;animation:rise .45s cubic-bezier(.2,.8,.2,1) forwards}',
-  '.card{animation:fade .3s ease-out}',
+  `.rise{opacity:0;animation:rise ${RISE_MS}ms cubic-bezier(.2,.8,.2,1) forwards}`,
+  `.card{animation:fade ${FADE_MS}ms ease-out}`,
   '@keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1}}',
   '@keyframes fade{from{opacity:0}to{opacity:1}}',
   '@media (prefers-reduced-motion:reduce){.rise,.card{animation:none;opacity:1}}',
@@ -75,12 +79,20 @@ export const MOTION = [
 // Every entrance at its end state. The desktop draws each new source as a new image and
 // plays its animation from the start, so a card drawn again (a reply streaming in, a
 // scroll) is drawn settled, or it would fade out and back in on each redraw.
-const SETTLED = '.rise,.card,.row,.rule{animation:none!important;opacity:1!important;stroke-dashoffset:0!important}'
+const SETTLED = '.rise,.card,.row,.rule,.fill{animation:none!important;opacity:1!important;stroke-dashoffset:0!important}'
 
 export const settled = (source: string): string => source.replace('</style>', `${SETTLED}</style>`)
 
+export const staggerStep = (count: number, stepMs: number): number => Math.min(stepMs, STAGGER_BUDGET_MS / Math.max(1, count - 1))
+
 export const riseDelay =(index: number, stepMs: number, startMs = 80): string =>
-  `style="animation-delay:${startMs + index * stepMs}ms"`
+  `style="animation-delay:${Math.round(startMs + index * stepMs)}ms"`
+
+export const staggerEnd = (count: number, stepMs: number, startMs = 80, durationMs = RISE_MS): number =>
+  Math.max(FADE_MS, Math.ceil(startMs + Math.max(0, count - 1) * stepMs + durationMs))
+
+export const riseEnd = (source: string): number =>
+  Math.max(RISE_MS, ...[...source.matchAll(/animation-delay:(\d+)ms/g)].map(([, delay = '0']) => Number(delay) + RISE_MS))
 
 const RADIUS = 12
 
