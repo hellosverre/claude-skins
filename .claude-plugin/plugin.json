@@ -1,7 +1,7 @@
 {
   "name": "skins",
-  "version": "0.1.4",
-  "description": "Skins for Claude Code's transcript: themed tool rows, reply gutters and spinner words. /skin swaps them live.",
+  "version": "0.5.0",
+  "description": "Skins for Claude Code: tool rows that open onto their input and answer, highlighted code, diff, table, math, Mermaid and shell cards, links, folding, a usage band, a calm mode and fifteen themes. /skin swaps them live.",
   "author": { "name": "hellosverre", "url": "https://github.com/hellosverre" },
   "license": "MIT",
   "keywords": ["claude-code-mods", "claude-mods", "function-hooks", "theme", "skin"],

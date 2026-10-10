@@ -8,7 +8,10 @@ export type Table = { kind: 'table'; header: string[]; align: Align[]; rows: str
 // `raw` is the fence as written, for the surfaces that keep Claude Code's own drawing.
 export type Code = { kind: 'code'; lang: string; code: string; raw: string }
 
-export type Segment = { kind: 'text'; text: string } | Table | Code
+// `tex` is the formula alone; `raw` the block as written, kept for the copy button.
+export type Math = { kind: 'math'; tex: string; raw: string }
+
+export type Segment = { kind: 'text'; text: string } | Table | Code | Math
 
 // Fences the desktop marks runnable with a Run button of its own. A card is an image and
 // cannot carry it, so these keep Claude Code's drawing there.
@@ -42,7 +45,14 @@ const alignOf = (cell: string): Align => {
 const fit = (cells: string[], width: number): string[] =>
   Array.from({ length: width }, (_, i) => cells[i] ?? '')
 
-export function splitReply(markdown: string): Segment[] {
+// `tables` off leaves tables as text; a fence `fence` turns down stays text too, so a
+// reply can be split for its charts alone. `math` takes display formulas out as their own
+// segments: ````math`` fences, `$$…$$` and `\[…\]`.
+export type SplitOptions = { tables: boolean; fence: (lang: string, code: string) => boolean; math?: boolean }
+
+const SPLIT_ALL: SplitOptions = { tables: true, fence: () => true }
+
+export function splitReply(markdown: string, options: SplitOptions = SPLIT_ALL): Segment[] {
   const lines = markdown.split('\n')
   const segments: Segment[] = []
   let text: string[] = []
@@ -62,18 +72,33 @@ export function splitReply(markdown: string): Segment[] {
 
     const fence = FENCE.exec(line)
 
+    if (options.math === true && !inFence) {
+      const formula = displayMath(lines, i, fence)
+
+      if (formula !== null) {
+        flush()
+        segments.push({ kind: 'math', tex: formula.tex, raw: lines.slice(i, formula.end + 1).join('\n') })
+        i = formula.end
+        continue
+      }
+    }
+
     // A closed fence becomes a code segment; one still streaming stays text.
     if (fence !== null && !inFence) {
       const close = lines.findIndex((other, j) => j > i && FENCE.test(other) && other.trim().replace(/[`~]/g, '') === '')
 
       if (close !== -1) {
+        const lang = (fence[2] ?? '').toLowerCase()
+        const code = lines.slice(i + 1, close).join('\n')
+
+        if (!options.fence(lang, code)) {
+          text.push(...lines.slice(i, close + 1))
+          i = close
+          continue
+        }
+
         flush()
-        segments.push({
-          kind: 'code',
-          lang: (fence[2] ?? '').toLowerCase(),
-          code: lines.slice(i + 1, close).join('\n'),
-          raw: lines.slice(i, close + 1).join('\n'),
-        })
+        segments.push({ kind: 'code', lang, code, raw: lines.slice(i, close + 1).join('\n') })
         i = close
         continue
       }
@@ -85,6 +110,7 @@ export function splitReply(markdown: string): Segment[] {
 
     const header = cellsOf(line)
     const isTable =
+      options.tables &&
       !inFence &&
       line.includes('|') &&
       SEPARATOR.test(next) &&
@@ -113,6 +139,63 @@ export function splitReply(markdown: string): Segment[] {
   flush()
 
   return segments
+}
+
+const DISPLAY_OPEN = /^\s*(\$\$|\\\[)(.*)$/
+
+// A display formula starting on line `i`: where it ends and the TeX inside. One still
+// streaming (no closing delimiter yet) is not one, so it stays text until it closes.
+function displayMath(lines: readonly string[], i: number, fence: RegExpExecArray | null): { tex: string; end: number } | null {
+  const line = lines[i] ?? ''
+
+  if (fence !== null) {
+    if ((fence[2] ?? '').toLowerCase() !== 'math') {
+      return null
+    }
+
+    const close = lines.findIndex((other, j) => j > i && FENCE.test(other) && other.trim().replace(/[`~]/g, '') === '')
+
+    return close === -1 ? null : { tex: lines.slice(i + 1, close).join('\n'), end: close }
+  }
+
+  const open = DISPLAY_OPEN.exec(line)
+
+  if (open === null) {
+    return null
+  }
+
+  const closer = open[1] === '$$' ? '$$' : '\\]'
+  const rest = open[2] ?? ''
+  const sameLine = rest.indexOf(closer)
+
+  // Whole on one line, ` x `, with nothing but space after it.
+  if (sameLine !== -1) {
+    const tex = rest.slice(0, sameLine)
+
+    return rest.slice(sameLine + closer.length).trim() === '' && tex.trim() !== '' ? { tex, end: i } : null
+  }
+
+  for (let j = i + 1; j < lines.length; j++) {
+    const other = lines[j] ?? ''
+    const at = other.indexOf(closer)
+
+    if (at !== -1) {
+      if (other.slice(at + closer.length).trim() !== '') {
+        return null
+      }
+
+      const tex = [rest, ...lines.slice(i + 1, j), other.slice(0, at)].join('\n')
+
+      return tex.trim() === '' ? null : { tex, end: j }
+    }
+
+    // A blank line ends a paragraph, and a formula with it.
+    if (other.trim() === '') {
+      return null
+    }
+  }
+
+  return null
 }
 
 // Terminal cells a character takes: wide East Asian characters and emoji take two,
@@ -213,4 +296,29 @@ export function padCell(text: string, width: number, align: Align): string {
   }
 
   return cut + ' '.repeat(room)
+}
+
+// What `/skin copy` puts on the clipboard: the whole reply, or with `code` its last code
+// block; a message instead when there is nothing to copy.
+export function copyOf(reply: string, code: boolean): { text: string } | { message: string } {
+  if (reply.trim() === '') {
+    return { message: 'Nothing to copy yet' }
+  }
+
+  if (!code) {
+    return { text: reply }
+  }
+
+  const last = splitReply(reply).findLast((segment): segment is Code => segment.kind === 'code')
+
+  return last === undefined ? { message: 'No code block in the last reply' } : { text: last.code }
+}
+
+// A table as it is drawn, boxed in monospace, for pasting where markdown does not render.
+export function tableArt(table: Table): string {
+  const widths = table.header.map((cell, col) => Math.max(widthOf(cell), ...table.rows.map(row => widthOf(row[col] ?? ''))))
+  const rule = (left: string, mid: string, right: string) => `${left}${widths.map(width => '─'.repeat(width + 2)).join(mid)}${right}`
+  const row = (cells: readonly string[]) => `│${widths.map((width, col) => ` ${padCell(cells[col] ?? '', width, table.align[col] ?? 'left')} `).join('│')}│`
+
+  return [rule('╭', '┬', '╮'), row(table.header), rule('├', '┼', '┤'), ...table.rows.map(row), rule('╰', '┴', '╯')].join('\n')
 }

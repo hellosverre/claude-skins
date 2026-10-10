@@ -34,13 +34,25 @@ export function fitText(text: string, width: number, isMono: boolean, size: numb
     return text
   }
 
+  // One pass: a width is the sum of its characters', so the cut is where the running sum
+  // and the ellipsis no longer fit. Re-measuring the whole text per character dropped was
+  // quadratic, and a code card's alt text runs to thousands of characters.
   const chars = [...text]
+  const room = width - measure('…', isMono, size)
+  let used = 0
+  let kept = 0
 
-  while (chars.length > 1 && measure(`${chars.join('')}…`, isMono, size) > width) {
-    chars.pop()
+  for (const char of chars) {
+    used += measure(char, isMono, size)
+
+    if (used > room) {
+      break
+    }
+
+    kept += 1
   }
 
-  return `${chars.join('')}…`
+  return `${chars.slice(0, Math.max(1, kept)).join('')}…`
 }
 
 // The room a reply gives a card, from the width the desktop reports in cells of its code
@@ -78,6 +90,9 @@ export const riseDelay =(index: number, stepMs: number, startMs = 80): string =>
 
 export const staggerEnd = (count: number, stepMs: number, startMs = 80, durationMs = RISE_MS): number =>
   Math.max(FADE_MS, Math.ceil(startMs + Math.max(0, count - 1) * stepMs + durationMs))
+
+export const riseEnd = (source: string): number =>
+  Math.max(RISE_MS, ...[...source.matchAll(/animation-delay:(\d+)ms/g)].map(([, delay = '0']) => Number(delay) + RISE_MS))
 
 const RADIUS = 12
 

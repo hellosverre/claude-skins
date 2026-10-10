@@ -16,6 +16,8 @@ import {
   usageBand,
 } from './rows'
 import type { Look } from './rows'
+import { codeRows } from './code-rows'
+import { shellRows } from './shell-rows'
 
 // Every element the skin draws, numbered, from the same builders the transcript uses, so
 // a note on #4 is a note on the real thing.
@@ -32,6 +34,8 @@ const TABLE: Table = {
     ['dracula', '#bd93f9', '340ms'],
   ],
 }
+
+const SHELL_FOLD = { stdout: { head: 8, tail: 4 }, stderr: { head: 8, tail: 4 } }
 
 const CODE = ['// Rate limit per route, keyed by user', 'export function limit(route: string, perMinute = 60) {', '  return (used: number) => used < perMinute', '}'].join('\n')
 
@@ -72,14 +76,19 @@ export function galleryPane(look: Look, columns: number) {
         ? section('Edit diff card', <Text color={palette.muted}>Desktop only; the terminal keeps Claude Code's diff.</Text>)
         : section('Edit diff card', diffCard(look, svg, DIFF, 'apps/hub/src/server.ts', width))}
       {svg === undefined
-        ? section('Shell output card', <Text color={palette.muted}>Desktop only.</Text>)
+        ? section(
+            'Shell output card: ok, failed with stderr, folded',
+            shellRows(look, 'pnpm test --filter hub', { stdout: 'Test Files  12 passed (12)\n     Tests  148 passed (148)', stderr: '', interrupted: false }, false, SHELL_FOLD),
+            shellRows(look, 'pnpm tsc', { stdout: 'src/server.ts', stderr: 'error TS2322: Type string is not assignable to number', interrupted: false, exitCode: 2 }, true, SHELL_FOLD),
+            shellRows(look, 'seq 40', { stdout: Array.from({ length: 40 }, (_, i) => String(i + 1)).join('\n'), stderr: '', interrupted: false }, false, SHELL_FOLD),
+          )
         : section(
             'Shell output card: ok, failed',
             terminalCard(look, svg, { stdout: 'Test Files  12 passed (12)\n     Tests  148 passed (148)', stderr: '', interrupted: false }, false, width),
             terminalCard(look, svg, { stdout: '', stderr: 'error TS2322: Type string is not assignable to number', interrupted: false }, true, width, 'copy-output-failed'),
           )}
       {svg === undefined
-        ? section('Code block card', <Text color={palette.muted}>Desktop only; the terminal keeps Claude Code's markdown.</Text>)
+        ? section('Code block, highlighted', codeRows(look, 'ts', CODE))
         : section('Code block card', codeCard(look, 'ts', CODE, svg, width))}
       {section('Table', replyRows(look, [TABLE], width, svg))}
       {svg === undefined

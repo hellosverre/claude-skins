@@ -1,0 +1,78 @@
+name: Bug
+description: Something draws wrong, breaks, or stops Claude Code from working
+labels: ["bug", "needs triage"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see, and what you expected instead. A screenshot or screen recording helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The smallest set of steps that shows it. Paste the prompt or command if it matters.
+      placeholder: |
+        1. /skin dracula
+        2. Ask Claude for a table with Korean text
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - Terminal (CLI)
+        - Desktop app (Code tab)
+        - IDE extension (VS Code, JetBrains)
+        - More than one
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      description: Pick the closest. "Not sure" is fine.
+      multiple: true
+      options:
+        - Tool rows (rail, icons, shimmer)
+        - Tables
+        - Code blocks and diffs
+        - Links, copy and folding
+        - Charts, Mermaid or math
+        - Usage band
+        - Themes and light/dark
+        - /skin commands and settings
+        - Install, update or startup errors
+        - Speed or flicker
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: skin
+    attributes:
+      label: Skin
+      description: Which skin was on. `/skin list` marks the active one.
+      placeholder: noir
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Skins version from `/plugin`, and `claude --version`.
+      placeholder: skins 0.5.0, Claude Code 2.1.288
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: OS and terminal
+      placeholder: macOS 15, Ghostty / Windows 11, Windows Terminal
+  - type: textarea
+    id: logs
+    attributes:
+      label: Errors or logs
+      description: Any error text Claude Code printed. Pasted as code automatically.
+      render: text

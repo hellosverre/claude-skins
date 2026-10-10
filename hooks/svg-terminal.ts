@@ -1,4 +1,5 @@
 import type { Palette } from './skin'
+import { outputTokens, roleColors } from './highlight'
 import { CONTROL_SLOT, escape, HEADER_MID, fitText, MONO, pill, riseDelay, staggerEnd, staggerStep, strokeIcon, svgCard } from './svg-kit'
 
 // A shell command's output as a terminal card: a status pill, the output in mono with
@@ -35,7 +36,7 @@ export function shellOutputOf(output: unknown): ShellOutput | null {
 type Line = { text: string; isErr: boolean } | { fold: number }
 
 // A stream's lines, colour codes stripped and trailing blank lines dropped.
-function streamLines(text: string, isErr: boolean): { text: string; isErr: boolean }[] {
+export function streamLines(text: string, isErr: boolean): { text: string; isErr: boolean }[] {
   const lines = text.replace(ANSI, '').replace(/\r/g, '').replace(/\t/g, '  ').split('\n')
   const end = lines.length - [...lines].reverse().findIndex(line => line.trim() !== '')
 
@@ -51,7 +52,8 @@ export function outputLines(output: ShellOutput): Line[] {
 }
 
 // `hasControl` leaves the header's right corner free for a Copy button laid over it.
-export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Palette, width: number, hasControl = false): { source: string; width: number; height: number; alt: string; entranceMs: number } {
+// `colour` picks out paths, numbers and verdicts in stdout with the skin's colours.
+export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Palette, width: number, hasControl = false, colour = false): { source: string; width: number; height: number; alt: string; entranceMs: number } {
   const lines = outputLines(output)
   const step = staggerStep(Math.max(1, lines.length), 22)
   const status = output.interrupted
@@ -70,8 +72,15 @@ export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Pa
     }
 
     const color = 'isNote' in line ? palette.muted : line.isErr ? palette.err : palette.fg
+    const text = fitText(line.text, width - 40, true, CODE)
+    const body =
+      colour && !line.isErr && !('isNote' in line)
+        ? outputTokens(text)
+            .map(token => `<tspan style="fill:${roleColors(palette)[token.role]}">${escape(token.text)}</tspan>`)
+            .join('')
+        : escape(text)
 
-    return `<g class="rise" ${riseDelay(i, step)}><text x="20" y="${top + 14}" font-family="${MONO}" font-size="${CODE}" style="fill:${color}" xml:space="preserve">${escape(fitText(line.text, width - 40, true, CODE))}</text></g>`
+    return `<g class="rise" ${riseDelay(i, step)}><text x="20" y="${top + 14}" font-family="${MONO}" font-size="${CODE}" style="fill:${color}" xml:space="preserve">${body}</text></g>`
   })
 
   const height = HEADER_H + 6 + Math.max(1, lines.length) * LINE_H + 10

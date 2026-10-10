@@ -1,0 +1,70 @@
+name: CI
+
+# Tests, manifest checks and the type check on all three systems, against the Claude Code
+# the compat matrix was measured on, and on Linux against the latest build as an early
+# warning. Nothing here talks to the model or needs a secret.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (${{ matrix.os }}, claude ${{ matrix.claude }})
+    runs-on: ${{ matrix.os }}
+    # The latest build may change the plugin API before skins catches up; it reports, it does not block.
+    continue-on-error: ${{ matrix.claude == 'latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        claude: ['2.1.288']
+        include:
+          - os: ubuntu-latest
+            claude: latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@${{ matrix.claude }}
+
+      - name: Validate the marketplace and plugin manifests
+        run: |
+          claude plugin validate .
+          claude plugin validate .claude-plugin/plugin.json
+
+      - name: Engine tests
+        run: claude plugin test .
+
+      # The engine writes the API's declarations beside a mod it loads from a folder. The
+      # print run has no credentials, so it stops after loading; the types are what it
+      # leaves behind. tsconfig.json reads them from .claude/types. Type-checked against
+      # the pinned build only: 2.1.296 no longer lays them on a print run without login.
+      - name: Lay the plugin API types
+        if: matrix.claude != 'latest'
+        env:
+          ANTHROPIC_API_KEY: ''
+        run: |
+          claude --plugin-dir . -p 'types' > /dev/null 2>&1 || true
+          test -f .claude-plugin/types/claude-code/index.d.ts
+          mkdir -p .claude/types
+          cp -R .claude-plugin/types/. .claude/types/
+          rm -f .claude/types/tsconfig.json
+
+      - name: Type check
+        if: matrix.claude != 'latest'
+        run: npx -y -p typescript@5.9.3 tsc -p tsconfig.json
