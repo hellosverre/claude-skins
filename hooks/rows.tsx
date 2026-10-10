@@ -285,12 +285,12 @@ export function desktopSpinnerRow(look: Look, Svg: SvgElement, mode: SpinnerMode
 
 // Your message in a rounded outline sized to what you typed, so it stands apart from
 // replies without taking the full width. Images it carried follow below it, drawn by
-// Claude Code.
+// Claude Code. `/skin prompt right` puts it on the right, where the desktop app draws it.
 export function promptRow(look: Look, text: string, images?: ReturnType<Ui['Text']>) {
   const { Box, Text } = look.ui
 
   return (
-    <Box flexDirection="column" alignItems="flex-start" marginY={1}>
+    <Box flexDirection="column" alignItems={look.prefs.prompt === 'right' ? 'flex-end' : 'flex-start'} marginY={1}>
       <Box borderStyle="round" borderColor={look.skin.palette.muted} paddingX={1} flexShrink={1}>
         <Text color={look.skin.palette.fg}>{text}</Text>
       </Box>

@@ -3,6 +3,7 @@ import type { CalmSnapshot, Prefs } from '../types'
 export const DEFAULT_PREFS: Prefs = {
   skin: 'noir',
   icons: 'unicode',
+  prompt: 'left',
   rail: true,
   tables: 'on',
   shimmer: true,
@@ -89,6 +90,7 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
         ? skin
         : DEFAULT_PREFS.skin,
     icons: saved.icons === 'ascii' ? 'ascii' : 'unicode',
+    prompt: saved.prompt === 'right' ? 'right' : 'left',
     rail: flagOr(saved.rail, DEFAULT_PREFS.rail),
     tables: tablesOr(saved.tables, DEFAULT_PREFS.tables),
     shimmer: flagOr(saved.shimmer, DEFAULT_PREFS.shimmer),
@@ -134,6 +136,7 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
     `${current.skin === 'off' ? '●' : '○'} off`,
     [
       `icons ${current.icons}`,
+      `prompt ${current.prompt}`,
       `rail ${onOff(current.rail)}`,
       `tables ${current.tables}`,
       `shimmer ${onOff(current.shimmer)}`,
@@ -190,6 +193,10 @@ export function runSkinCommand(args: string, current: Prefs, names: readonly str
       return value === 'on' || value === 'text' || value === 'off'
         ? changed({ ...current, tables: value }, `tables ${value}`)
         : refused(current, 'usage: /skin tables on|text|off')
+    case 'prompt':
+      return value === 'left' || value === 'right'
+        ? changed({ ...current, prompt: value }, `prompt ${value}`)
+        : refused(current, 'usage: /skin prompt left|right')
     case 'icons':
       return value === 'unicode' || value === 'ascii'
         ? changed({ ...current, icons: value }, `icons: ${value}`)

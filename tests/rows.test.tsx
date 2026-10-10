@@ -245,6 +245,32 @@ test('a typed prompt sits in an outline sized to its text, other senders keep th
   }
 })
 
+test('/skin prompt right moves the outline to the right, and the settings pane moves it back', async ($, on) => {
+  stubEngine(on)
+  const alignOf = async (surface: (typeof SURFACES)[number]) => {
+    const typed = await $.ui.mount({ ...SITE, surface, component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind: 'composer' }, isExpanded: false } })
+    const column = (await typed.find({ type: 'Box' })) as { props: { alignItems?: string } } | undefined
+    await typed.unmount()
+
+    return column?.props.alignItems
+  }
+
+  await runSkin($, 'prompt right')
+
+  for (const surface of SURFACES) {
+    expect(await alignOf(surface)).toBe('flex-end')
+  }
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await pane.find({ key: 'prompt' }))?.props.label).toBe('prompt right')
+  await pane.press({ key: 'prompt' })
+  await pane.unmount()
+
+  for (const surface of SURFACES) {
+    expect(await alignOf(surface)).toBe('flex-start')
+  }
+})
+
 test('a reply with a table draws the table, a reply without one keeps its own drawing', async ($, on) => {
   stubEngine(on)
 

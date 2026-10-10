@@ -500,7 +500,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | links | fold | icons]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | links | fold | icons | prompt]',
       immediate: true,
     })
     await $.tool.register({
@@ -738,6 +738,7 @@ reply width: ${lastColumns} columns`
       tables: () => void commit($, { ...state, prefs: { ...prefs, tables: nextTables(prefs.tables) } }),
       icons: () =>
         void commit($, { ...state, prefs: { ...prefs, icons: prefs.icons === 'unicode' ? 'ascii' : 'unicode' } }),
+      prompt: () => void commit($, { ...state, prefs: { ...prefs, prompt: prefs.prompt === 'left' ? 'right' : 'left' } }),
       edit: slot => void update($, editingAtom, () => slot),
       paint: hex => {
         const made = withSlot(prefs.skin === 'off' ? DEFAULT_PREFS.skin : prefs.skin, custom, editing, hex)
