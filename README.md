@@ -63,6 +63,7 @@ To keep it installed but go back to Claude Code's own drawing, run `/skin off`.
 | `/skin calm` · `calm off` | No motion, one line per tool row, read-only output folded, failures always whole. `calm off` puts back what you had |
 | `/skin copy` · `copy code` | Copy Claude's last reply, or just its last code block |
 | `/skin tables on\|text\|off` | `text` draws tables and code as selectable text on the desktop |
+| `/skin prompt left\|right` | Which side your prompt's outline sits on. `right` matches the desktop app's own layout |
 | `/skin gallery` | Every element the skin draws, numbered, to point at |
 | `/skin pin` · `unpin` · `share` | Give this folder its own look, drop it, or make it the default |
 

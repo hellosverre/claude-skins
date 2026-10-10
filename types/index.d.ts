@@ -21,6 +21,8 @@ export type SkinSlot =
 export type Prefs = {
   skin: string
   icons: 'unicode' | 'ascii'
+  // Which side the outline around a typed prompt sits on; 'right' matches the desktop app.
+  prompt: 'left' | 'right'
   rail: boolean
   // 'text' keeps the skin but draws tables and code as text the desktop can select.
   tables: 'on' | 'text' | 'off'

@@ -200,6 +200,17 @@ test('tables are on, text or off, and a stored on/off from before still reads', 
   expect(runSkinCommand('list', { ...DEFAULT_PREFS, tables: 'text' }, NAMES).message).toContain('tables text')
 })
 
+test('the prompt sits left or right, and anything else stored reads as left', async () => {
+  expect(DEFAULT_PREFS.prompt).toBe('left')
+  expect(parsePrefs({ prompt: 'right' }, NAMES).prompt).toBe('right')
+  expect(parsePrefs({ prompt: 'centre' }, NAMES).prompt).toBe('left')
+  expect(parsePrefs({ prompt: true }, NAMES).prompt).toBe('left')
+  expect(runSkinCommand('prompt right', DEFAULT_PREFS, NAMES).prefs.prompt).toBe('right')
+  expect(runSkinCommand('prompt left', { ...DEFAULT_PREFS, prompt: 'right' }, NAMES).prefs.prompt).toBe('left')
+  expect(runSkinCommand('prompt up', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin prompt left|right')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, prompt: 'right' }, NAMES).message).toContain('prompt right')
+})
+
 test('cells are read as colours, diffs, numbers, code or text', async () => {
   expect(kindOfCell('#7aa2f7')).toBe('colour')
   expect(kindOfCell('+18 −3')).toBe('diff')
