@@ -1,7 +1,10 @@
 {
   "name": "hellosverre-mods",
   "description": "Mods for Claude Code: how it looks, and what it shows you.",
-  "owner": { "name": "hellosverre", "url": "https://github.com/hellosverre" },
+  "owner": {
+    "name": "hellosverre",
+    "url": "https://github.com/hellosverre"
+  },
   "plugins": [
     {
       "name": "skins",
@@ -10,8 +13,19 @@
     },
     {
       "name": "redgreen",
-      "source": { "source": "github", "repo": "hellosverre/redgreen" },
+      "source": {
+        "source": "github",
+        "repo": "hellosverre/redgreen"
+      },
       "description": "Test results in a pane: failures from Claude's vitest, jest, pytest, cargo, go, bun and deno runs, their detail and run history."
+    },
+    {
+      "name": "smart-compact",
+      "source": {
+        "source": "github",
+        "repo": "hellosverre/smart-compact"
+      },
+      "description": "Compacts at the right moment: after a commit or green tests, before the prompt cache expires, or when Claude asks for it."
     }
   ]
 }

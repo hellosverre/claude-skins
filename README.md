@@ -247,6 +247,12 @@ Saving a file reloads the mod in the running session. Tests: `claude plugin test
 `npx tsx scripts/previews.ts`. A new built-in skin is one file: copy `hooks/themes/nord.ts`, change
 the colours and words, add a line to `hooks/themes/index.ts`.
 
+## More mods
+
+- [redgreen](https://github.com/hellosverre/redgreen): test results in a pane beside the chat
+- [smart-compact](https://github.com/hellosverre/smart-compact): compacts after a commit, green tests, before the prompt cache expires, or when Claude asks
+- [mod-store](https://github.com/hellosverre/mod-store): browse, search and install 2,700 mods from a pane
+
 ## License
 
 MIT
