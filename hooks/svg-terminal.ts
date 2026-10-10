@@ -1,5 +1,5 @@
 import type { Palette } from './skin'
-import { CONTROL_SLOT, escape, HEADER_MID, fitText, MONO, pill, riseDelay, strokeIcon, svgCard } from './svg-kit'
+import { CONTROL_SLOT, escape, HEADER_MID, fitText, MONO, pill, riseDelay, staggerEnd, staggerStep, strokeIcon, svgCard } from './svg-kit'
 
 // A shell command's output as a terminal card: a status pill, the output in mono with
 // stderr in the error colour, and long output folded to its head and tail.
@@ -51,8 +51,9 @@ export function outputLines(output: ShellOutput): Line[] {
 }
 
 // `hasControl` leaves the header's right corner free for a Copy button laid over it.
-export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Palette, width: number, hasControl = false): { source: string; width: number; height: number; alt: string } {
+export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Palette, width: number, hasControl = false): { source: string; width: number; height: number; alt: string; entranceMs: number } {
   const lines = outputLines(output)
+  const step = staggerStep(Math.max(1, lines.length), 22)
   const status = output.interrupted
     ? { text: 'interrupted', color: palette.warn }
     : output.timedOutAfterMs !== undefined
@@ -65,12 +66,12 @@ export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Pa
     const top = HEADER_H + 6 + i * LINE_H
 
     if ('fold' in line) {
-      return `<g class="rise" ${riseDelay(i, 22)}><text x="20" y="${top + 14}" font-size="11.5" style="fill:${palette.muted}">⋯  ${line.fold} more lines</text></g>`
+      return `<g class="rise" ${riseDelay(i, step)}><text x="20" y="${top + 14}" font-size="11.5" style="fill:${palette.muted}">⋯  ${line.fold} more lines</text></g>`
     }
 
     const color = 'isNote' in line ? palette.muted : line.isErr ? palette.err : palette.fg
 
-    return `<g class="rise" ${riseDelay(i, 22)}><text x="20" y="${top + 14}" font-family="${MONO}" font-size="${CODE}" style="fill:${color}" xml:space="preserve">${escape(fitText(line.text, width - 40, true, CODE))}</text></g>`
+    return `<g class="rise" ${riseDelay(i, step)}><text x="20" y="${top + 14}" font-family="${MONO}" font-size="${CODE}" style="fill:${color}" xml:space="preserve">${escape(fitText(line.text, width - 40, true, CODE))}</text></g>`
   })
 
   const height = HEADER_H + 6 + Math.max(1, lines.length) * LINE_H + 10
@@ -87,5 +88,6 @@ export function terminalSvg(output: ShellOutput, isErrored: boolean, palette: Pa
     width,
     height,
     alt: lines.map(line => ('fold' in line ? `… ${line.fold} more lines` : line.text)).join('\n') || 'no output',
+    entranceMs: staggerEnd(Math.max(1, lines.length), step),
   }
 }

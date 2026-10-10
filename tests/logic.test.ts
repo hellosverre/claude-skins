@@ -10,6 +10,7 @@ import { diffLines, diffSvg, hunksOf } from '../hooks/svg-diff'
 import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/svg-table'
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
 import { limitLabel, meterColor, metersOf, usageSvg } from '../hooks/svg-usage'
+import { settled } from '../hooks/svg-kit'
 import { isNewer, updateNotice } from '../hooks/updates'
 import { deepen, gnomeDark, isLightTheme, macDark, resolveLight, toLight, windowsDark } from '../hooks/light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
@@ -348,4 +349,54 @@ test('each system says dark, light, or nothing', async () => {
   expect(gnomeDark(ran(0, "'prefer-dark'\n"))).toBe(true)
   expect(gnomeDark(ran(0, "'default'\n"))).toBe(false)
   expect(gnomeDark(ran(1, '', 'No such schema'))).toBe(undefined)
+})
+
+function animationEndsMs(source: string): number {
+  const timings = new Map(
+    [...source.matchAll(/\.([\w-]+)\{[^}]*?animation:[\w-]+ (\d+)ms([^;}]*)/g)].map(([, name = '', duration = '0', rest = '']) => [
+      name,
+      Number(duration) + Number(/ (\d+)ms/.exec(rest)?.[1] ?? 0),
+    ]),
+  )
+
+  return Math.max(
+    0,
+    ...[...source.matchAll(/<\w+([^>]*)>/g)].map(([, attributes = '']) => {
+      const timing = timings.get(/class="([\w-]+)"/.exec(attributes)?.[1] ?? '')
+
+      return timing === undefined ? 0 : timing + Number(/animation-delay:(\d+)ms/.exec(attributes)?.[1] ?? 0)
+    }),
+  )
+}
+
+test('a card says when its entrance ends, and no entrance lasts past a second', async () => {
+  const many = (count: number) => Array.from({ length: count }, (_, i) => `line ${i}`)
+  const table = (rows: number) => tableSvg({ kind: 'table', header: ['n'], align: ['left'], rows: many(rows).map(line => [line]) }, tokyoNight.palette, 700)
+  const diff = (lines: number) =>
+    diffSvg(hunksOf({ filePath: '/work/a.ts', structuredPatch: [{ oldStart: 1, newStart: 1, lines: many(lines).map(line => `+${line}`) }] })!, 'a.ts', tokyoNight.palette, 700)
+  const shell = (lines: number) => terminalSvg(shellOutputOf({ stdout: many(lines).join('\n'), stderr: '', interrupted: false })!, false, tokyoNight.palette, 700)
+  const cards = {
+    table1: table(1),
+    table5: table(5),
+    table120: table(120),
+    code1: codeSvg('a', 'ts', tokyoNight.palette, 700),
+    code200: codeSvg(many(200).join('\n'), 'ts', tokyoNight.palette, 700),
+    diff2: diff(2),
+    diff100: diff(100),
+    shell0: shell(0),
+    shell100: shell(100),
+    usage: usageSvg([{ label: 'context', percent: 42 }], tokyoNight.palette),
+  }
+
+  for (const [name, card] of Object.entries(cards)) {
+    expect(card.entranceMs, `${name} settles only after its last animation ends`).toBeGreaterThanOrEqual(animationEndsMs(card.source))
+    expect(card.entranceMs, `${name} entrance stays short`).toBeLessThanOrEqual(1000)
+  }
+})
+
+test('a settled usage band keeps its rings full and still', async () => {
+  const source = settled(usageSvg([{ label: 'context', percent: 42 }], tokyoNight.palette).source)
+
+  expect(source).toContain('class="fill"')
+  expect(source).toContain('.fill{animation:none!important')
 })

@@ -35,7 +35,7 @@ export type Look = {
   copy?: (text: string) => void
   // True the first time this drawing shows the card by that key; a card drawn again is
   // drawn settled. Absent, every card animates.
-  isFirstDraw?: (key: string) => boolean
+  isFirstDraw?: (key: string, entranceMs: number) => boolean
 }
 
 export type Call = {
@@ -318,19 +318,19 @@ export function tableRows(look: Look, table: Table, maxWidth: number, control?: 
 }
 
 // A card's source: animated on its first draw, settled on every draw after it.
-const sourceOf = (look: Look, key: string, source: string): string =>
-  look.isFirstDraw === undefined || look.isFirstDraw(key) ? source : settled(source)
+const sourceOf = (look: Look, key: string, built: { source: string; entranceMs: number }): string =>
+  look.isFirstDraw === undefined || look.isFirstDraw(key, built.entranceMs) ? built.source : settled(built.source)
 
 // A card drawn as an image, with its Copy button laid over the top-right corner the card
 // left free. The image cannot be pressed, so the button is a real one on top of it; the
 // box hugs the image so the corner is the card's, not the column's.
-function cardWithCopy(look: Look, Svg: SvgElement, built: { source: string; alt: string; width: number; height: number }, key: string, text: string) {
+function cardWithCopy(look: Look, Svg: SvgElement, built: { source: string; alt: string; width: number; height: number; entranceMs: number }, key: string, text: string) {
   const { Box, Button } = look.ui
   const copy = look.copy
 
   return (
     <Box marginY={1} alignSelf="flex-start">
-      <Svg source={sourceOf(look, key, built.source)} alt={built.alt} width={built.width} height={built.height} />
+      <Svg source={sourceOf(look, key, built)} alt={built.alt} width={built.width} height={built.height} />
       {copy === undefined ? (
         ''
       ) : (
@@ -485,12 +485,12 @@ export function askBand(look: Look, headers: readonly string[]) {
 }
 
 // A vector card in a reply or under a tool row, a line's breath above and below it.
-function card(look: Look, Svg: SvgElement, built: { source: string; alt: string }, key: string) {
+function card(look: Look, Svg: SvgElement, built: { source: string; alt: string; entranceMs: number }, key: string) {
   const { Box } = look.ui
 
   return (
     <Box marginY={1}>
-      <Svg source={sourceOf(look, key, built.source)} alt={built.alt} />
+      <Svg source={sourceOf(look, key, built)} alt={built.alt} />
     </Box>
   )
 }
@@ -503,11 +503,11 @@ export function diffCard(look: Look, Svg: SvgElement, input: DiffInput, shownPat
   return card(look, Svg, diffSvg(input, shownPath, look.skin.palette, cardWidth(columns)), 'diff')
 }
 
-export function terminalCard(look: Look, Svg: SvgElement, output: ShellOutput, isErrored: boolean, columns: number) {
+export function terminalCard(look: Look, Svg: SvgElement, output: ShellOutput, isErrored: boolean, columns: number, key = 'copy-output') {
   const text = [output.stdout, output.stderr].filter(part => part.trim() !== '').join('\n')
   const withCopy = text === '' ? { ...look, copy: undefined } : look
 
-  return cardWithCopy(withCopy, Svg, terminalSvg(output, isErrored, look.skin.palette, cardWidth(columns), withCopy.copy !== undefined), 'copy-output', text)
+  return cardWithCopy(withCopy, Svg, terminalSvg(output, isErrored, look.skin.palette, cardWidth(columns), withCopy.copy !== undefined), key, text)
 }
 
 // From this full, the band suggests compacting and makes it the main action.
@@ -523,7 +523,7 @@ function meterView(look: Look, meters: readonly Meter[]) {
     const Svg = look.svg
     const built = usageSvg(meters, palette)
 
-    return <Svg source={built.source} alt={built.alt} width={built.width} height={built.height} />
+    return <Svg source={sourceOf(look, `usage:${built.alt}`, built)} alt={built.alt} width={built.width} height={built.height} />
   }
 
   return (

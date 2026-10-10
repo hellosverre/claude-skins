@@ -62,6 +62,7 @@ declare module 'claude-code' {
       images: StateFamily<boolean>
       compacting: boolean
       pinned: boolean
+      settle: number
     }
   }
 }

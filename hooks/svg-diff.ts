@@ -1,5 +1,5 @@
 import type { Palette } from './skin'
-import { escape, fitText, MONO, pill, riseDelay, strokeIcon, svgCard } from './svg-kit'
+import { escape, fitText, MONO, pill, riseDelay, staggerEnd, staggerStep, strokeIcon, svgCard } from './svg-kit'
 
 // An edit as a card: the file, how many lines it added and removed, and the changed
 // lines with their numbers, green and red, rising in one after another.
@@ -67,9 +67,10 @@ export function hunksOf(output: unknown): DiffInput | null {
   return null
 }
 
-export function diffSvg(input: DiffInput, shownPath: string, palette: Palette, width: number): { source: string; height: number; alt: string } {
+export function diffSvg(input: DiffInput, shownPath: string, palette: Palette, width: number): { source: string; height: number; alt: string; entranceMs: number } {
   const all = diffLines(input.hunks)
   const shown = all.slice(0, MAX_LINES)
+  const step = staggerStep(shown.length, 18)
   const hidden = all.length - shown.length
   const added = all.filter(line => line.kind === 'add').length
   const removed = all.filter(line => line.kind === 'del').length
@@ -83,7 +84,7 @@ export function diffSvg(input: DiffInput, shownPath: string, palette: Palette, w
     if (line.kind === 'gap') {
       y += GAP_H
 
-      return `<g ${riseDelay(i, 18)} class="rise"><text x="${codeX}" y="${top + 14}" font-size="11" style="fill:${palette.muted}">⋯  line ${line.at}</text></g>`
+      return `<g ${riseDelay(i, step)} class="rise"><text x="${codeX}" y="${top + 14}" font-size="11" style="fill:${palette.muted}">⋯  line ${line.at}</text></g>`
     }
 
     y += LINE_H
@@ -94,7 +95,7 @@ export function diffSvg(input: DiffInput, shownPath: string, palette: Palette, w
     const number = (value: number | undefined, x: number) =>
       value === undefined ? '' : `<text x="${x}" y="${top + 15}" text-anchor="end" font-family="${MONO}" font-size="11" style="fill:${palette.muted}">${value}</text>`
 
-    return `<g ${riseDelay(i, 18)} class="rise">${band}${number(line.old, 44)}${number(line.new, 80)}<text x="96" y="${top + 15}" font-family="${MONO}" font-size="${CODE}" style="fill:${tint ?? palette.muted}">${sign}</text><text x="${codeX}" y="${top + 15}" font-family="${MONO}" font-size="${CODE}" style="fill:${line.kind === 'ctx' ? palette.muted : palette.fg}" xml:space="preserve">${escape(fitText(line.text, codeWidth, true, CODE))}</text></g>`
+    return `<g ${riseDelay(i, step)} class="rise">${band}${number(line.old, 44)}${number(line.new, 80)}<text x="96" y="${top + 15}" font-family="${MONO}" font-size="${CODE}" style="fill:${tint ?? palette.muted}">${sign}</text><text x="${codeX}" y="${top + 15}" font-family="${MONO}" font-size="${CODE}" style="fill:${line.kind === 'ctx' ? palette.muted : palette.fg}" xml:space="preserve">${escape(fitText(line.text, codeWidth, true, CODE))}</text></g>`
   })
 
   const footer = hidden > 0 ? `<text x="${codeX}" y="${y + 18}" font-size="11.5" style="fill:${palette.muted}">${hidden} more line${hidden === 1 ? '' : 's'}</text>` : ''
@@ -113,5 +114,6 @@ export function diffSvg(input: DiffInput, shownPath: string, palette: Palette, w
     source: svgCard(width, height, palette, '', header + rows.join('') + footer),
     height,
     alt: `${shownPath}: +${added} −${removed}`,
+    entranceMs: staggerEnd(shown.length, step),
   }
 }
