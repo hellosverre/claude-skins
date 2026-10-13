@@ -982,7 +982,9 @@ reply width: ${lastColumns} columns`
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     const active = await activeSkin($)
 
-    if (active === null || !TYPED.has(e.props.origin.kind) || e.props.text.length > MAX_PROMPT) {
+    // Off the terminal your messages keep Claude Code's own component: it carries the copy
+    // and rewind buttons, the context menu and selectable text, which an outline would lose.
+    if (active === null || e.surface !== 'terminal' || !TYPED.has(e.props.origin.kind) || e.props.text.length > MAX_PROMPT) {
       return next(e)
     }
 

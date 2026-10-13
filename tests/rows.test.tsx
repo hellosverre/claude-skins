@@ -228,47 +228,37 @@ test('a folded group is one node, an expanded one keeps its rows', async ($, on)
 test('a typed prompt sits in an outline sized to its text, other senders keep their row', async ($, on) => {
   stubEngine(on)
 
-  for (const surface of SURFACES) {
-    const prompt = (kind: 'composer' | 'task-notification') =>
-      ({ ...SITE, surface, component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind }, isExpanded: false } }) as const
+  const prompt = (kind: 'composer' | 'task-notification') =>
+    ({ ...SITE, surface: 'terminal', component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind }, isExpanded: false } }) as const
 
-    const typed = await $.ui.mount(prompt('composer'))
-    const column = (await typed.find({ type: 'Box' })) as { props: { alignItems?: string }; children?: readonly { props?: { borderStyle?: string } }[] } | undefined
-    // The outline hugs the text: its column does not stretch it to the full width.
-    expect(column?.props.alignItems).toBe('flex-start')
-    expect(column?.children?.[0]?.props?.borderStyle).toBe('round')
-    // The desktop draws the text as the app's own Markdown, so it can be selected.
-    expect(await typed.find({ type: surface === 'terminal' ? 'Text' : 'Markdown', text: 'fix the build' })).toBeDefined()
-    await typed.unmount()
+  const typed = await $.ui.mount(prompt('composer'))
+  const column = (await typed.find({ type: 'Box' })) as { props: { alignItems?: string }; children?: readonly { props?: { borderStyle?: string } }[] } | undefined
+  // The outline hugs the text: its column does not stretch it to the full width.
+  expect(column?.props.alignItems).toBe('flex-start')
+  expect(column?.children?.[0]?.props?.borderStyle).toBe('round')
+  expect(await typed.find({ type: 'Text', text: 'fix the build' })).toBeDefined()
+  await typed.unmount()
 
-    const notice = await $.ui.mount(prompt('task-notification'))
-    expect(await notice.find({ type: 'Text', text: 'stock row' })).toBeDefined()
-    await notice.unmount()
-  }
+  const notice = await $.ui.mount(prompt('task-notification'))
+  expect(await notice.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+  await notice.unmount()
 })
 
-test('a desktop prompt shows its marks as typed, keeps its lines, and falls back to text when too long', async ($, on) => {
+test('on the desktop every prompt keeps the app message, with its copy and rewind buttons', async ($, on) => {
   stubEngine(on)
-  const mount = (text: string) =>
-    $.ui.mount({ ...SITE, surface: 'desktop', component: 'UserMessage', requestId: 'm1', props: { text, origin: { kind: 'composer' }, isExpanded: false } })
 
-  const marked = await mount('**not bold** <b>\n    indented # 1.')
-  const noBreak = String.fromCharCode(0xa0)
-  const shown = [String.raw`\*\*not bold\*\* \<b\>  `, noBreak.repeat(4) + String.raw`indented \# 1\.`].join('\n')
-  expect(await marked.find({ type: 'Markdown', text: shown }), 'marks escaped, indent kept').toBeDefined()
-  await marked.unmount()
-
-  // Escaping grows a prompt: 4000 characters of dots and line breaks are near 10000 of Markdown.
-  const long = '.\n'.repeat(2000)
-  const huge = await mount(long)
-  expect(await huge.find({ type: 'Text', text: long }), 'too long for Markdown').toBeDefined()
-  await huge.unmount()
+  for (const mode of ['left', 'right', 'plain']) {
+    await runSkin($, `prompt ${mode}`)
+    const typed = await $.ui.mount({ ...SITE, surface: 'desktop', component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind: 'composer' }, isExpanded: false } })
+    expect(await typed.find({ type: 'Text', text: 'stock row' }), mode).toBeDefined()
+    await typed.unmount()
+  }
 })
 
 test('/skin prompt right moves the outline to the right, and the settings pane moves it back', async ($, on) => {
   stubEngine(on)
-  const alignOf = async (surface: (typeof SURFACES)[number]) => {
-    const typed = await $.ui.mount({ ...SITE, surface, component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind: 'composer' }, isExpanded: false } })
+  const alignOf = async () => {
+    const typed = await $.ui.mount({ ...SITE, surface: 'terminal', component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind: 'composer' }, isExpanded: false } })
     const column = (await typed.find({ type: 'Box' })) as { props: { alignItems?: string } } | undefined
     await typed.unmount()
 
@@ -276,19 +266,13 @@ test('/skin prompt right moves the outline to the right, and the settings pane m
   }
 
   await runSkin($, 'prompt right')
-
-  for (const surface of SURFACES) {
-    expect(await alignOf(surface)).toBe('flex-end')
-  }
+  expect(await alignOf()).toBe('flex-end')
 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await pane.find({ key: 'prompt' }))?.props.label).toBe('prompt right')
   await pane.press({ key: 'prompt' })
   await pane.unmount()
-
-  for (const surface of SURFACES) {
-    expect(await alignOf(surface)).toBe('flex-start')
-  }
+  expect(await alignOf()).toBe('flex-start')
 })
 
 test('/skin prompt plain draws the prompt without an outline, and the settings pane cycles left, right, plain', async ($, on) => {
@@ -304,15 +288,13 @@ test('/skin prompt plain draws the prompt without an outline, and the settings p
   expect(await press()).toBe('prompt right')
   expect(await press()).toBe('prompt plain')
 
-  for (const surface of SURFACES) {
-    const typed = await $.ui.mount({ ...SITE, surface, component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind: 'composer' }, isExpanded: false } })
-    const column = (await typed.find({ type: 'Box' })) as { props: { alignItems?: string }; children?: readonly { props?: { borderStyle?: string } }[] } | undefined
-    expect(column?.props.alignItems).toBe('flex-start')
-    expect(column?.children?.[0]?.props?.borderStyle).toBeUndefined()
-    expect(await typed.find({ type: 'Text', text: '▍ ' })).toBeDefined()
-    expect(await typed.find({ type: surface === 'terminal' ? 'Text' : 'Markdown', text: 'fix the build' })).toBeDefined()
-    await typed.unmount()
-  }
+  const typed = await $.ui.mount({ ...SITE, surface: 'terminal', component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind: 'composer' }, isExpanded: false } })
+  const column = (await typed.find({ type: 'Box' })) as { props: { alignItems?: string }; children?: readonly { props?: { borderStyle?: string } }[] } | undefined
+  expect(column?.props.alignItems).toBe('flex-start')
+  expect(column?.children?.[0]?.props?.borderStyle).toBeUndefined()
+  expect(await typed.find({ type: 'Text', text: '▍ ' })).toBeDefined()
+  expect(await typed.find({ type: 'Text', text: 'fix the build' })).toBeDefined()
+  await typed.unmount()
 
   expect(await press()).toBe('prompt left')
   await pane.unmount()
