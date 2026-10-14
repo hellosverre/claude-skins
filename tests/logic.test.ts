@@ -229,6 +229,17 @@ test('words are the skin’s or Claude Code’s, and anything else stored reads 
   expect(runSkinCommand('list', { ...DEFAULT_PREFS, words: 'claude' }, NAMES).message).toContain('words claude')
 })
 
+test('expand opens every tool group, is off by default, and anything but a boolean stored reads as off', async () => {
+  expect(DEFAULT_PREFS.expand).toBe(false)
+  expect(parsePrefs({ expand: true }, NAMES).expand).toBe(true)
+  expect(parsePrefs({ expand: 'yes' }, NAMES).expand).toBe(false)
+  expect(parsePrefs({}, NAMES).expand).toBe(false)
+  expect(runSkinCommand('expand on', DEFAULT_PREFS, NAMES).prefs.expand).toBe(true)
+  expect(runSkinCommand('expand off', { ...DEFAULT_PREFS, expand: true }, NAMES).prefs.expand).toBe(false)
+  expect(runSkinCommand('expand maybe', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin expand on|off')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, expand: true }, NAMES).message).toContain('expand on')
+})
+
 test('cells are read as colours, diffs, numbers, code or text', async () => {
   expect(kindOfCell('#7aa2f7')).toBe('colour')
   expect(kindOfCell('+18 −3')).toBe('diff')

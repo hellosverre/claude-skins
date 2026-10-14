@@ -572,7 +572,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'skin',
       description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | countdown | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | links | fold | icons | prompt | words]',
+      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | countdown | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | links | fold | expand | icons | prompt | words]',
       immediate: true,
     })
     const designTool = $.tool
@@ -927,8 +927,13 @@ reply width: ${lastColumns} columns`
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
     const active = await activeSkin($)
 
-    if (active === null || e.props.isExpanded) {
+    if (active === null) {
       return next(e)
+    }
+
+    // expand opens every group for Claude Code to draw, as if the person had.
+    if (e.props.isExpanded || active.prefs.expand) {
+      return next({ ...e, props: { ...e.props, isExpanded: true } })
     }
 
     return groupRow(lookOf($.ui.resolve(e), active, e.surface), e.props.calls)

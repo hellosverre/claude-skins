@@ -226,6 +226,37 @@ test('a folded group is one node, an expanded one keeps its rows', async ($, on)
   expect(await expanded.find({ type: 'Text', text: 'stock row' })).toBeDefined()
 })
 
+test('/skin expand on hands a folded group to Claude Code opened, /skin expand off draws the one-line group again', async ($, on) => {
+  // What Claude Code is asked to draw, with the flag the skin left on it. It answers before
+  // the stub, which draws every row that reaches it.
+  const asked: boolean[] = []
+  on('ui.render', { component: 'ToolGroup' }, ($, e) => {
+    asked.push(e.props.isExpanded)
+
+    return STOCK
+  })
+  stubEngine(on)
+
+  const calls = [call('Read', {}), call('Read', {}), call('Grep', { pattern: 'x' })]
+  const isLine = async () => {
+    const row = await $.ui.mount({ ...SITE, surface: 'terminal', component: 'ToolGroup', requestId: 'g1', props: { calls, isActive: false, isExpanded: false } })
+    const found = (await row.find({ type: 'Text', text: /Read 2 · Search 1/ })) !== undefined
+    await row.unmount()
+
+    return found
+  }
+
+  expect(await isLine(), 'a folded group is one line by default').toBe(true)
+  expect(asked, 'and Claude Code is not asked').toEqual([])
+
+  await runSkin($, 'expand on')
+  expect(await isLine(), 'expand on: the skin stops drawing the line').toBe(false)
+  expect(asked, 'and Claude Code is asked for the group opened').toEqual([true])
+
+  await runSkin($, 'expand off')
+  expect(await isLine(), 'expand off: the line is back').toBe(true)
+})
+
 test('a typed prompt sits in an outline sized to its text, other senders keep their row', async ($, on) => {
   stubEngine(on)
 

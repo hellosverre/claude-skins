@@ -54,6 +54,8 @@ export type Prefs = {
   copy: boolean
   // Long code, tables and shell output folded behind a `▾ N more` control.
   fold: boolean
+  // Runs of reads and searches drawn open, as if each had been expanded, not as one line.
+  expand: boolean
   // While /skin calm is on, the parts it changed as they were before it, for calm off to
   // put back; null while it is off.
   calm: CalmSnapshot | null

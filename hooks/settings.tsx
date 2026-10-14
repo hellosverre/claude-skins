@@ -126,6 +126,7 @@ export function settingsPane(look: Look, ui: PaneUi, model: SettingsModel, actio
         {toggle('links', 'l', prefs.links)}
         {toggle('copy', 'p', prefs.copy)}
         {toggle('fold', 'f', prefs.fold)}
+        {toggle('expand', 'd', prefs.expand)}
         <Button key="calm" label={`calm ${mark(prefs.calm !== null)}`} hotkey="k" plain dimColor={prefs.calm === null} onPress={() => actions.calm()} />
         <Button key="icons" label={`icons ${prefs.icons}`} hotkey="i" plain onPress={() => actions.icons()} />
         <Button key="prompt" label={`prompt ${prefs.prompt}`} hotkey="a" plain onPress={() => actions.prompt()} />

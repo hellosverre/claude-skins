@@ -22,6 +22,7 @@ export const DEFAULT_PREFS: Prefs = {
   links: true,
   copy: true,
   fold: true,
+  expand: false,
   calm: null,
 }
 
@@ -44,6 +45,7 @@ export const TOGGLES = {
   links: 'links',
   copy: 'copy',
   fold: 'fold',
+  expand: 'expand',
 } as const satisfies Record<string, keyof Prefs>
 
 export type ToggleWord = keyof typeof TOGGLES
@@ -112,6 +114,7 @@ export function parsePrefs(raw: unknown, names: readonly string[]): Prefs {
     links: flagOr(saved.links, DEFAULT_PREFS.links),
     copy: flagOr(saved.copy, DEFAULT_PREFS.copy),
     fold: flagOr(saved.fold, DEFAULT_PREFS.fold),
+    expand: flagOr(saved.expand, DEFAULT_PREFS.expand),
     calm: calmOf(saved.calm),
   }
 }
@@ -159,6 +162,7 @@ export const listing = (current: Prefs, names: readonly string[]): string =>
       `links ${onOff(current.links)}`,
       `copy ${onOff(current.copy)}`,
       `fold ${onOff(current.fold)}`,
+      `expand ${onOff(current.expand)}`,
       `calm ${onOff(current.calm !== null)}`,
     ].join(' · '),
   ].join('\n')
