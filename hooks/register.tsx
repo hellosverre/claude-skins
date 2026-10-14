@@ -107,6 +107,20 @@ async function activeSkin($: EngineInterface): Promise<Active | null> {
   return skin === undefined ? null : { prefs, skin: forTheme(skin, await read($, lightAtom)), custom }
 }
 
+// Whether the skin-code mod draws this reply's code in a VS Code theme. False when it is not
+// installed (the call throws), is off, or fails to answer.
+async function drawnBySkinCode($: EngineInterface, text: unknown): Promise<boolean> {
+  if (typeof text !== 'string') {
+    return false
+  }
+
+  try {
+    return (await $.skinCode.draws({ text })) === true
+  } catch {
+    return false
+  }
+}
+
 // Where each system keeps its appearance, and how to read the answer.
 const PROBES = [
   { argv: ['defaults', 'read', '-g', 'AppleInterfaceStyle'], dark: macDark },
@@ -1056,7 +1070,10 @@ reply width: ${lastColumns} columns`
     const { prefs } = active
     const segments = replySegments(text, prefs, e.surface)
 
-    if (segments === null) {
+    // A reply skin-code draws is its: Claude Code may run either mod's hook first, and this
+    // keeps the code in the person's VS Code theme whichever it is. skin-code draws the
+    // prose around it through `$.skins.markdown`.
+    if (segments === null || (await drawnBySkinCode($, text))) {
       return next(e)
     }
 

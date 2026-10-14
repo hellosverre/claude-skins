@@ -66,6 +66,36 @@ test('a diff fence on the terminal is numbered rows in the skin’s colours, wit
   expect(copied).toEqual(['export function limit(n: number) {\n  return n <= 10\n}'])
 })
 
+const TS = 'Here:\n\n```ts\nconst limit = (n: number) => n <= 10\n```'
+
+// skin-code as another mod adds it: `$.skinCode.draws` answering for each reply.
+function skinCode(on: On, draws: boolean) {
+  on('engine.create', async ($, e, next) => ({ ...(await next(e)), skinCode: { draws: async () => draws } }))
+}
+
+test('a reply skin-code draws is left to it, whichever of the two runs first', async ($, on) => {
+  stub(on)
+  skinCode(on, true)
+
+  const ui = await $.ui.mount(reply(TS))
+  expect(await ui.find({ type: 'Text', text: 'stock row' })).toBeDefined()
+})
+
+test('a reply skin-code leaves is drawn as before', async ($, on) => {
+  stub(on)
+  skinCode(on, false)
+
+  const left = await $.ui.mount(reply(TS))
+  expect(await left.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+})
+
+test('without skin-code a reply with code is drawn as before', async ($, on) => {
+  stub(on)
+
+  const ui = await $.ui.mount(reply(TS))
+  expect(await ui.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+})
+
 const FS_DIFF =
   '```diff\n--- a/Foo.fs\n+++ b/Foo.fs\n@@ -1,2 +1,3 @@\n let foo (bar: decimal) =\n-    if bar < 0m then Error "baz" else Ok bar\n+    match bar with\n+    | v -> Ok v\n```'
 
