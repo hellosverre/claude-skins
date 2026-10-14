@@ -541,15 +541,19 @@ test('a table wider than its share spans the column instead of running off it', 
       requestId: 'r2',
       props: { text: wide, isFirstOfReply: true },
     })
-    type Node = { props?: { width?: unknown; position?: unknown; top?: unknown }; children?: readonly Node[] }
+    type Node = { props?: { width?: unknown; position?: unknown; top?: unknown; borderStyle?: unknown }; children?: readonly Node[] }
     const reply = (await ui.find({ type: 'Box' })) as Node
     const frame = reply.children?.[0]
-    // Copy sits on the frame's top border, laid over it at the right.
+    // Copy sits on the bordered box's top row, laid over it from the plain Box around it:
+    // inside the bordered box, Windows Terminal drew the border over it (#54).
+    const bordered = frame?.children?.[0]
     const control = frame?.children?.at(-1)
 
     expect(frame?.props?.width).toBe('100%')
+    expect(bordered?.props?.borderStyle).toBe('round')
+    expect(bordered?.children?.some(child => child.props?.position === 'absolute')).toBe(false)
     expect(control?.props?.position).toBe('absolute')
-    expect(control?.props?.top).toBe(-1)
+    expect(control?.props?.top).toBe(0)
     // The long cell wraps onto more lines instead of being cut.
     expect(await ui.find({ type: 'Text', text: /…$/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /^a long description/ })).toBeDefined()

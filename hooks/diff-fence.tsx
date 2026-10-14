@@ -1,6 +1,7 @@
 import { FOLD_CODE, foldButton, shownCount } from './fold'
 import { highlight, languageOf, roleColors } from './highlight'
 import type { Token } from './highlight'
+import { onBorder } from './rows'
 import type { Look, Ui } from './rows'
 import { diffLines } from './svg-diff'
 import type { DiffInput, Hunk } from './svg-diff'
@@ -117,47 +118,46 @@ export function diffRows(
 
   return (
     <Box flexDirection="column" marginY={1}>
-      <Box flexDirection="column" borderStyle="round" borderColor={palette.muted} paddingX={1}>
-        {shown.map((line, i) =>
-          line.kind === 'gap' ? (
-            <Text color={palette.muted}>{`${' '.repeat(digits * 2 + 2)}⋯ line ${line.at}`}</Text>
-          ) : syntax?.[i] !== undefined && line.text !== '' ? (
-            // The marker keeps the change's colour; the code after it takes the language's.
-            <Text wrap="truncate-end">
-              <Text color={palette.muted}>{`${number(line.old)} ${number(line.new)} `}</Text>
-              <Text color={line.kind === 'add' ? palette.ok : line.kind === 'del' ? palette.err : palette.muted}>
-                {`${line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '} `}
-              </Text>
-              {(syntax[i] ?? []).map(token => (
-                <Text color={colors[token.role]} dimColor={line.kind === 'del'}>
-                  {token.text}
+      {onBorder(
+        look,
+        <Box flexDirection="column" borderStyle="round" borderColor={palette.muted} paddingX={1}>
+          {shown.map((line, i) =>
+            line.kind === 'gap' ? (
+              <Text color={palette.muted}>{`${' '.repeat(digits * 2 + 2)}⋯ line ${line.at}`}</Text>
+            ) : syntax?.[i] !== undefined && line.text !== '' ? (
+              // The marker keeps the change's colour; the code after it takes the language's.
+              <Text wrap="truncate-end">
+                <Text color={palette.muted}>{`${number(line.old)} ${number(line.new)} `}</Text>
+                <Text color={line.kind === 'add' ? palette.ok : line.kind === 'del' ? palette.err : palette.muted}>
+                  {`${line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '} `}
                 </Text>
-              ))}
-            </Text>
-          ) : (
-            <Text wrap="truncate-end">
-              <Text color={palette.muted}>{`${number(line.old)} ${number(line.new)} `}</Text>
-              <Text color={line.kind === 'add' ? palette.ok : line.kind === 'del' ? palette.err : palette.muted}>
-                {`${line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '} ${line.text === '' ? ' ' : line.text}`}
+                {(syntax[i] ?? []).map(token => (
+                  <Text color={colors[token.role]} dimColor={line.kind === 'del'}>
+                    {token.text}
+                  </Text>
+                ))}
               </Text>
+            ) : (
+              <Text wrap="truncate-end">
+                <Text color={palette.muted}>{`${number(line.old)} ${number(line.new)} `}</Text>
+                <Text color={line.kind === 'add' ? palette.ok : line.kind === 'del' ? palette.err : palette.muted}>
+                  {`${line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '} ${line.text === '' ? ' ' : line.text}`}
+                </Text>
+              </Text>
+            ),
+          )}
+        </Box>,
+        {
+          label: (
+            <Text color={palette.muted}>
+              {` ${diff.path === '' ? 'diff' : diff.path} `}
+              <Text color={palette.ok}>{`+${added}`}</Text>
+              <Text color={palette.err}>{` −${removed} `}</Text>
             </Text>
           ),
-        )}
-        <Box position="absolute" top={-1} left={1}>
-          <Text color={palette.muted}>
-            {` ${diff.path === '' ? 'diff' : diff.path} `}
-            <Text color={palette.ok}>{`+${added}`}</Text>
-            <Text color={palette.err}>{` −${removed} `}</Text>
-          </Text>
-        </Box>
-        {control === undefined ? (
-          ''
-        ) : (
-          <Box position="absolute" top={-1} right={1}>
-            {control}
-          </Box>
-        )}
-      </Box>
+          control,
+        },
+      )}
       {foldButton(look, foldKey, lines.length, FOLD_CODE)}
     </Box>
   )

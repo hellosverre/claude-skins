@@ -363,24 +363,13 @@ export function tableRows(look: Look, table: Table, maxWidth: number, control?: 
   )
 
   const fold = foldButton(look, foldKey, table.rows.length, FOLD_ROWS)
-  const frame = (
-    <Box
-      flexDirection="column"
-      marginY={fold === '' ? 1 : 0}
-      borderStyle="round"
-      borderColor={palette.muted}
-      {...(isFluid ? { width: '100%' } : { alignSelf: 'flex-start' as const })}
-    >
+  const frame = onBorder(
+    look,
+    <Box flexDirection="column" borderStyle="round" borderColor={palette.muted}>
       {row(table.header, true, palette.surface)}
       {rows.map((cells, i) => row(cells, false, i % 2 === 1 ? palette.zebra : undefined))}
-      {control === undefined ? (
-        ''
-      ) : (
-        <Box position="absolute" top={-1} right={1}>
-          {control}
-        </Box>
-      )}
-    </Box>
+    </Box>,
+    { control, box: { marginY: fold === '' ? 1 : 0, ...(isFluid ? { width: '100%' } : { alignSelf: 'flex-start' }) } },
   )
 
   return fold === '' ? (
@@ -474,6 +463,37 @@ function mathRows(look: Look, tex: string, maxWidth: number, key: string) {
 // A table as markdown again, for the clipboard.
 const tableMarkdown = (table: Table): string =>
   [table.header, table.header.map(() => '---'), ...table.rows].map(cells => `| ${cells.join(' | ')} |`).join('\n')
+
+// A frame with a label and a control on its top border. They are laid over it from a plain
+// Box around the frame, not from inside it: inside a bordered Box, Windows Terminal drew the
+// border over them (#54). `box` sizes the plain Box the way the frame should sit.
+export function onBorder(
+  look: Look,
+  frame: ReturnType<Ui['Box']>,
+  parts: { label?: ReturnType<Ui['Text']>; control?: ReturnType<Ui['Button']> | ReturnType<Ui['Box']>; box?: Record<string, unknown> },
+) {
+  const { Box } = look.ui
+
+  return (
+    <Box flexDirection="column" {...parts.box}>
+      {frame}
+      {parts.label === undefined ? (
+        ''
+      ) : (
+        <Box position="absolute" top={0} left={2}>
+          {parts.label}
+        </Box>
+      )}
+      {parts.control === undefined ? (
+        ''
+      ) : (
+        <Box position="absolute" top={0} right={2}>
+          {parts.control}
+        </Box>
+      )}
+    </Box>
+  )
+}
 
 // A Copy button padded to sit on a border line; nothing where nothing can copy.
 export function copyButton(look: Look, key: string, text: string, label = ' Copy ') {

@@ -1,5 +1,5 @@
 import { outputLine } from './code-rows'
-import { copyButton } from './rows'
+import { copyButton, onBorder } from './rows'
 import type { Look } from './rows'
 import { foldLines, linesOf, shellStatus } from './shell'
 import type { Folded, ShellLine, ShellResult } from './shell'
@@ -41,7 +41,8 @@ export function shellRows(look: Look, command: string, result: ShellResult, isEr
   const control = text === '' ? undefined : copyButton(look, 'copy-output', text)
   const isEmpty = lines.stdout.length === 0 && lines.stderr.length === 0
 
-  return (
+  return onBorder(
+    look,
     <Box flexDirection="column" borderStyle="round" borderColor={palette.muted} paddingX={1}>
       <Box flexDirection="row">
         <Box flexGrow={1} flexShrink={1}>
@@ -65,13 +66,7 @@ export function shellRows(look: Look, command: string, result: ShellResult, isEr
       ) : (
         ''
       )}
-      {control === undefined ? (
-        ''
-      ) : (
-        <Box position="absolute" top={-1} right={1}>
-          {control}
-        </Box>
-      )}
-    </Box>
+    </Box>,
+    { control },
   )
 }

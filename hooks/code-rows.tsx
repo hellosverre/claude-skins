@@ -1,6 +1,7 @@
 import { highlight, outputTokens, roleColors } from './highlight'
 import type { Token } from './highlight'
 import { FOLD_CODE, foldButton, shownCount } from './fold'
+import { onBorder } from './rows'
 import type { Look, Ui } from './rows'
 
 // Code on the terminal in the skin's colours: a fenced block as a framed run of lines with
@@ -35,21 +36,15 @@ export function codeRows(look: Look, lang: string, code: string, control?: Retur
 
   return (
     <Box flexDirection="column" marginY={1}>
-      <Box flexDirection="column" borderStyle="round" borderColor={palette.muted} paddingX={1}>
-        {shown.map(tokens => (
-          <Text>{tokens.length === 0 || tokens.every(token => token.text === '') ? ' ' : tokenSpans(look, tokens)}</Text>
-        ))}
-        <Box position="absolute" top={-1} left={1}>
-          <Text color={palette.muted}>{` ${lang} `}</Text>
-        </Box>
-        {control === undefined ? (
-          ''
-        ) : (
-          <Box position="absolute" top={-1} right={1}>
-            {control}
-          </Box>
-        )}
-      </Box>
+      {onBorder(
+        look,
+        <Box flexDirection="column" borderStyle="round" borderColor={palette.muted} paddingX={1}>
+          {shown.map(tokens => (
+            <Text>{tokens.length === 0 || tokens.every(token => token.text === '') ? ' ' : tokenSpans(look, tokens)}</Text>
+          ))}
+        </Box>,
+        { label: <Text color={palette.muted}>{` ${lang} `}</Text>, control },
+      )}
       {foldButton(look, foldKey, lines.length, FOLD_CODE)}
     </Box>
   )
