@@ -331,14 +331,11 @@ const JUSTIFY = { left: 'flex-start', right: 'flex-end', center: 'center' } as c
 // app reports the window's width, wider than the transcript column a reply sits in.
 const NATURAL_SHARE = 0.55
 
-// Long cells wrap within their column up to this many lines, as on the desktop card,
-// and only the last one is cut with `…`.
-const MAX_CELL_LINES = 6
-
 // A grid of cells, so columns line up in the terminal's monospace and in the desktop
 // app's proportional font alike. `control`, such as a Copy button, sits on the frame's
 // top border at the right, as ╭──── Copy ─╮.
-// Past FOLD_ROWS rows it folds under `foldKey`.
+// Past FOLD_ROWS rows it folds under `foldKey`. Long cells wrap within their column in
+// full: unlike the desktop card, the terminal has no tooltip to read a cut cell by (#59).
 export function tableRows(look: Look, table: Table, maxWidth: number, control?: ReturnType<Ui['Button']>, foldKey = 'fold-table') {
   const { Box, Text } = look.ui
   const rows = table.rows.slice(0, shownCount(look, foldKey, table.rows.length, FOLD_ROWS))
@@ -356,7 +353,7 @@ export function tableRows(look: Look, table: Table, maxWidth: number, control?: 
     <Box flexDirection="row" {...(band === undefined ? {} : { backgroundColor: band })}>
       {cells.map((cell, i) => (
         <Box {...size(i)} flexDirection="column" paddingX={CELL_PAD} alignItems={JUSTIFY[table.align[i] ?? 'left']}>
-          {wrapLines(cell, widths[i] ?? 0, MAX_CELL_LINES).map(line => (
+          {wrapLines(cell, widths[i] ?? 0, Infinity).map(line => (
             <Text color={palette.fg} bold={isHeader} wrap="truncate-end">
               {line}
             </Text>

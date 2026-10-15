@@ -605,7 +605,7 @@ test('a table wider than its share spans the column instead of running off it', 
   }
 })
 
-test('a terminal table wraps sentence-length cells within their column and caps them with …', async ($, on) => {
+test('a terminal table wraps long cells within their column in full, with no … (#59)', async ($, on) => {
   stubEngine(on)
 
   const sentence = 'They run in the background and report back when they are done'
@@ -619,8 +619,9 @@ test('a terminal table wraps sentence-length cells within their column and caps 
 
   // Every word of the wrapped cell is drawn, split over lines of its column.
   expect(shown.filter(line => sentence.includes(line) && line !== '').join(' ')).toContain(sentence)
-  expect(shown.filter(line => line.startsWith('word')).length).toBe(6)
-  expect(shown.filter(line => line.endsWith('…'))).toHaveLength(1)
+  // The terminal has no tooltip to read a cut cell by, so a long cell keeps every word.
+  expect(shown.filter(line => line.startsWith('word')).join(' ')).toBe(endless)
+  expect(shown.filter(line => line.endsWith('…'))).toHaveLength(0)
   await ui.unmount()
 })
 
