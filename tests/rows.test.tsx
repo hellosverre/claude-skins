@@ -5,6 +5,7 @@ import type { Engine, Plugin } from 'claude-code/testing'
 import { DESIGN_TOOL } from '../hooks/designer'
 import { widthOf } from '../hooks/markdown'
 import { mermaidArt } from '../hooks/mermaid-art'
+import { literal } from '../hooks/rows'
 import noir from '../hooks/themes/noir'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -243,6 +244,18 @@ test('a typed prompt sits in an outline sized to its text, other senders keep th
   const notice = await $.ui.mount(prompt('task-notification'))
   expect(await notice.find({ type: 'Text', text: 'stock row' })).toBeDefined()
   await notice.unmount()
+})
+
+test('a prompt in Markdown shows its marks as typed, and brackets and parentheses never open math', () => {
+  expect(literal('a *b* `c` #d')).toBe('a \\*b\\* \\`c\\` \\#d')
+  // `\(…\)` and `\[…\]` are inline and display math in the desktop app's Markdown, and `\,` a thin space.
+  expect(literal('== Receipt rule set g3dk-inbound (new, made active)')).toBe('\\=\\= Receipt rule set g3dk\\-inbound &#40;new\\, made active&#41;')
+  expect(literal('see [x] here')).toBe('see &#91;x&#93; here')
+  // A backslash typed before a bracket stays an escaped backslash, not a math opener.
+  expect(literal('\\(x\\) and \\[y\\]')).toBe('\\\\&#40;x\\\\&#41; and \\\\&#91;y\\\\&#93;')
+  // A link typed out shows as typed, and a digit with `)` does not open an ordered list.
+  expect(literal('[a](b)')).toBe('&#91;a&#93;&#40;b&#41;')
+  expect(literal('1) first')).toBe('1&#41; first')
 })
 
 test('on the desktop every prompt keeps the app message, with its copy and rewind buttons', async ($, on) => {

@@ -286,12 +286,16 @@ export function desktopSpinnerRow(look: Look, Svg: SvgElement, mode: SpinnerMode
 
 // Markdown reads a prompt's marks as formatting, so each ASCII mark is escaped to show as
 // typed and each line break becomes a hard break. Leading spaces become no-break spaces,
-// which indent the same without turning the line into a code block.
+// which indent the same without turning the line into a code block. Brackets and
+// parentheses are character references instead: escaped, `\(` and `\[` open math in the
+// desktop app's Markdown, whether or not `/skin math` is on.
+const REFERENCES: Readonly<Record<string, string>> = { '(': '&#40;', ')': '&#41;', '[': '&#91;', ']': '&#93;' }
+
 export const literal = (text: string): string =>
   text
     .replace(/\r\n?/g, '\n')
     .split('\n')
-    .map(line => line.replace(/[!-\/:-@\[-`{-~]/g, '\\$&').replace(/^ +/, spaces => '\u00a0'.repeat(spaces.length)))
+    .map(line => line.replace(/[!-\/:-@\[-`{-~]/g, mark => REFERENCES[mark] ?? `\\${mark}`).replace(/^ +/, spaces => ' '.repeat(spaces.length)))
     .join('  \n')
 
 // Your message in a rounded outline sized to what you typed, so it stands apart from
