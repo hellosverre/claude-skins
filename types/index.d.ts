@@ -99,9 +99,9 @@ declare module 'claude-code' {
       // draws; throws on a malformed argument. No copy or fold controls.
       markdown: (args: SkinsMarkdownArgs) => Promise<RenderElement | undefined>
     }
-    // What the skin-code mod adds, when it is installed (a call throws when it is not):
-    // skins leaves it the replies it draws.
-    skinCode: {
+    // What the skin-code mod adds, when it is installed (absent, or a call throws, when it
+    // is not): skins leaves it the replies it draws.
+    skinCode?: {
       draws: (args: { text: string }) => Promise<boolean>
     }
   }

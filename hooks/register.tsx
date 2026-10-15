@@ -115,7 +115,7 @@ async function drawnBySkinCode($: EngineInterface, text: unknown): Promise<boole
   }
 
   try {
-    return (await $.skinCode.draws({ text })) === true
+    return (await $.skinCode!.draws({ text })) === true
   } catch {
     return false
   }
