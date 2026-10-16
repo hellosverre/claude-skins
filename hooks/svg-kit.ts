@@ -1,3 +1,4 @@
+import { charWidth } from './markdown'
 import type { Palette } from './skin'
 
 // What every vector card shares: fonts, text measuring and fitting, escaping, and the
@@ -13,10 +14,18 @@ export const escape = (text: string): string =>
 // Width of a string in pixels, close enough to lay out a card without a renderer.
 export function measure(text: string, isMono: boolean, size: number): number {
   if (isMono) {
-    return [...text].length * size * 0.6
+    return [...text].reduce((sum, char) => sum + charWidth(char), 0) * size * 0.6
   }
 
   return [...text].reduce((sum, char) => {
+    const cells = charWidth(char)
+
+    // Wide East Asian characters (Hangul, kana, Han) and emoji are about one em wide,
+    // nearly twice a Latin letter; combining marks and joiners take no room (#66).
+    if (cells !== 1) {
+      return sum + cells * size * 0.5
+    }
+
     if ('iljtf.,:;|!\'` '.includes(char)) {
       return sum + size * 0.3
     }

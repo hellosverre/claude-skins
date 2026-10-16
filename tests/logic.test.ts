@@ -345,6 +345,15 @@ test('a long cell wraps on its words, breaks a word too long for the column, and
   expect(wrapCell('word '.repeat(80), 60, false, 2).at(-1)).toMatch(/…$/)
 })
 
+test('a Hangul, kana or Han character measures about one em, twice a Latin letter, so wide cells wrap in their column', async () => {
+  const korean = '둘째 칸에도 한글 문장을 길게 넣으면 글자가 옆 칸과 겹치고 카드 오른쪽에서 잘린다'
+
+  expect(measure('한', false)).toBeGreaterThan(measure('a', false) * 1.6)
+  expect(measure('漢字', true)).toBe(measure('abcd', true))
+  expect(measure('é', false)).toBe(measure('e', false))
+  expect(wrapCell(korean, 200, false).every(line => measure(line, false) <= 200)).toBe(true)
+})
+
 test('short columns keep their width and long ones share the rest', async () => {
   const [hash, why, who] = fitColumns([20, 900, 60], 700)
 
