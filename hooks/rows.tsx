@@ -906,27 +906,26 @@ function meterView(look: Look, meters: readonly Meter[]) {
     return <Svg source={sourceOf(look, `usage:${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
   }
 
-  // Powerline arrow; needs a Powerline or Nerd Font, which most modern terminals ship or fall back to.
-  const ARROW = '\ue0b0'
-  const CELLS = 6
+  const CELLS = 10
 
   return (
-    <Box flexDirection="row" columnGap={2}>
+    <Box flexDirection="row" columnGap={4}>
       {meters.map(meter => {
         const color = meterColor(meter.percent, palette)
-        const filled = Math.round((meter.percent / 100) * CELLS)
-        const hasResets = meter.resets !== undefined
+        const eighths = Math.round((meter.percent / 100) * CELLS * 8)
+        const full = Math.floor(eighths / 8)
+        const hasEdge = eighths % 8 >= 4
+        const rest = CELLS - full - (hasEdge ? 1 : 0)
 
         return (
-          <Text>
-            <Text color={palette.surface} backgroundColor={color} bold>{` ${meter.label} `}</Text>
-            <Text color={color} backgroundColor={palette.surface}>{ARROW}</Text>
-            <Text color={color} backgroundColor={palette.surface}>{` ${'▰'.repeat(filled)}`}</Text>
-            <Text color={palette.muted} backgroundColor={palette.surface}>{'▱'.repeat(CELLS - filled)}</Text>
-            <Text color={palette.fg} backgroundColor={palette.surface} bold>{` ${meter.percent}% `}</Text>
-            {hasResets ? <Text color={palette.surface} backgroundColor={palette.zebra}>{ARROW}</Text> : ''}
-            {hasResets ? <Text color={palette.muted} backgroundColor={palette.zebra}>{` ⟳ ${meter.resets} `}</Text> : ''}
-            <Text color={hasResets ? palette.zebra : palette.surface}>{ARROW}</Text>
+          <Text color={palette.muted}>
+            <Text color={color}>●</Text>
+            {` ${meter.label}  `}
+            <Text color={palette.fg} bold>{`${meter.percent}%`}</Text>
+            {'  '}
+            <Text color={color}>{'━'.repeat(full) + (hasEdge ? '╸' : '')}</Text>
+            <Text dimColor>{'─'.repeat(Math.max(0, rest))}</Text>
+            {meter.resets === undefined ? '' : `  ${meter.resets}`}
           </Text>
         )
       })}
