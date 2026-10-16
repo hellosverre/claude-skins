@@ -405,8 +405,18 @@ async function reloadIfNewSession($: EngineInterface): Promise<void> {
   }
 
   loadedFor = id
-  await load($)
-  await followTheme($)
+
+  // A resumed scheduled-task session can start before Claude Code has bound it, and
+  // $.config.list rejects until then (#64). Not loaded yet, then: the next append tries again.
+  try {
+    await load($)
+    await followTheme($)
+  } catch (error) {
+    if (loadedFor === id) {
+      loadedFor = undefined
+    }
+    $.ui.log(`not loaded yet: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' })
+  }
 }
 
 // A pinned folder keeps its prefs to itself; every other folder shares the default.

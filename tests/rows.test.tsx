@@ -1229,6 +1229,38 @@ test('the first row of a new session loads the saved prefs again, without classi
   expect(await colorNow('b3')).not.toBe(before)
 })
 
+// A scheduled task's session, resumed in the desktop app, can start before Claude Code binds it (#64).
+test('a resume before the session is bound shows no error, and the next row loads it', async ($, on) => {
+  const logs: string[] = []
+  let isBound = false
+  let themeReads = 0
+  stubEngine(on, { log: true })
+  on('ui.log', ($, e) => {
+    logs.push(e.text)
+    return { value: undefined }
+  })
+  on('session.id', () => ({ value: 's1' }))
+  on('config.list', () => {
+    if (!isBound) {
+      throw new Error('$.config.list is not available in this mode: no session is bound in this process')
+    }
+    themeReads += 1
+    return { value: [] }
+  })
+  on('classic.SessionStart', () => ({}) as never)
+  const note = { message: { type: 'user', content: [{ type: 'text', text: 'hi' }] } } as never
+
+  await $.classic.SessionStart({ source: 'resume' } as never)
+  expect(logs.filter(text => text.startsWith('not loaded yet:'))).toHaveLength(1)
+
+  // An older kit (the pinned CI build) cannot append a row at all: nothing more to check there.
+  isBound = true
+  if (!(await $.session.append(note).then(() => true, () => false))) {
+    return
+  }
+  expect(themeReads, 'the row after the bind reads the theme').toBeGreaterThan(0)
+})
+
 test('quiet output folds a read-only call to its row, a failure to its error line', async ($, on) => {
   stubEngine(on)
   // The kit gives each call its own id; the engine's answer reads it back.
