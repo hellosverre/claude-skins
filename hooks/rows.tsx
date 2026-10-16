@@ -944,7 +944,7 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
 
   return (
     // The right edge stays clear: the band draws its own collapse mark ([-]) there.
-    <Box flexDirection="row" alignItems="center" columnGap={2} paddingRight={5}>
+    <Box flexDirection="row" alignItems="center" columnGap={2} paddingRight={5} marginTop={1}>
       {meterView(look, meters)}
       <Box flexGrow={1} />
       {canCompact && isNudge ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
