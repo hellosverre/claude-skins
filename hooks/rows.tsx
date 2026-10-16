@@ -26,7 +26,7 @@ import { cardWidth, settled } from './svg-kit'
 import { tableSvg } from './svg-table'
 import { terminalSvg } from './svg-terminal'
 import type { ShellOutput } from './svg-terminal'
-import { metersKey, usageLine, usageSvg } from './svg-usage'
+import { meterColor, metersKey, usageSvg } from './svg-usage'
 import { codeRows } from './code-rows'
 import { languageOf } from './highlight'
 import type { Meter } from './svg-usage'
@@ -906,14 +906,29 @@ function meterView(look: Look, meters: readonly Meter[]) {
     return <Svg source={sourceOf(look, `usage:${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
   }
 
+  const CELLS = 10
+
   return (
-    <Box flexDirection="row" columnGap={3}>
-      {usageLine(meters).map(meter => (
-        <Text color={palette.muted}>
-          <Text color={palette.user}>{meter.bar}</Text>
-          {` ${meter.text}`}
-        </Text>
-      ))}
+    <Box flexDirection="row" columnGap={4}>
+      {meters.map(meter => {
+        const color = meterColor(meter.percent, palette)
+        const eighths = Math.round((meter.percent / 100) * CELLS * 8)
+        const full = Math.floor(eighths / 8)
+        const hasEdge = eighths % 8 >= 4
+        const rest = CELLS - full - (hasEdge ? 1 : 0)
+
+        return (
+          <Text color={palette.muted}>
+            <Text color={color}>●</Text>
+            {` ${meter.label}  `}
+            <Text color={palette.fg} bold>{`${meter.percent}%`}</Text>
+            {'  '}
+            <Text color={color}>{'━'.repeat(full) + (hasEdge ? '╸' : '')}</Text>
+            <Text dimColor>{'─'.repeat(Math.max(0, rest))}</Text>
+            {meter.resets === undefined ? '' : `  ${meter.resets}`}
+          </Text>
+        )
+      })}
     </Box>
   )
 }
@@ -928,7 +943,7 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
 
   return (
     // The right edge stays clear: the band draws its own collapse mark ([-]) there.
-    <Box flexDirection="row" alignItems="center" columnGap={2} paddingRight={5}>
+    <Box flexDirection="row" alignItems="center" columnGap={2} paddingRight={5} marginTop={1}>
       {meterView(look, meters)}
       <Box flexGrow={1} />
       {canCompact && isNudge ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}

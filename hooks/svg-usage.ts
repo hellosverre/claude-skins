@@ -5,10 +5,7 @@ import { escape, FONT, measure } from './svg-kit'
 // The band above the prompt: how full the context window is and how much of each plan
 // limit is spent, as rings that fill in when they draw.
 
-const RING_R = 9
 const FILL_MS = 900
-const ITEM_W = 132
-const TEXT_SIZE = 12.5
 const MINUTE_MS = 60_000
 
 // `resets`, where shown, is the time left until the limit resets, as `countdownOf` writes it.
@@ -75,23 +72,43 @@ export const meterColor = (percent: number, palette: Palette): string =>
   percent >= 95 ? palette.err : percent >= 80 ? palette.warn : palette.user
 
 export function usageSvg(meters: readonly Meter[], palette: Palette): { source: string; width: number; height: number; alt: string; entranceMs: number } {
-  // A meter with a countdown is wider than the rest; each starts where the one before ended.
-  const widths = meters.map(meter => Math.max(ITEM_W, Math.ceil(RING_R * 2 + 12 + measure(meterText(meter), false, TEXT_SIZE) + 20)))
+  const PERCENT_SIZE = 15
+  const SUB_SIZE = 10.5
+  const height = 40
+  const cy = height / 2
+  const r = 12
+  const stroke = 4
+  const circumference = 2 * Math.PI * r
+  const textX = 2 * r + stroke + 12
+
+  const subOf = (meter: Meter): string => `${meter.label}${meter.resets === undefined ? '' : ` · ${meter.resets}`}`
+
+  // Each meter is a ring with the percentage large beside it and the label and countdown under it.
+  const widths = meters.map(meter =>
+    Math.ceil(textX + Math.max(measure(`${meter.percent}%`, false, PERCENT_SIZE) * 1.1, measure(subOf(meter), false, SUB_SIZE)) + 28),
+  )
   const starts = widths.map((_, i) => widths.slice(0, i).reduce((sum, w) => sum + w, 0))
   const width = widths.reduce((sum, w) => sum + w, 0)
-  const height = 30
-  const circumference = 2 * Math.PI * RING_R
+
+  const defs: string[] = []
 
   const items = meters
     .map((meter, i) => {
-      const x = (starts[i] ?? 0) + RING_R + 4
+      const x0 = starts[i] ?? 0
+      const cx = x0 + r + stroke / 2 + 1
       const filled = (circumference * meter.percent) / 100
       const color = meterColor(meter.percent, palette)
 
+      defs.push(
+        `<linearGradient id="g${i}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".55"/><stop offset="1" stop-color="${color}"/></linearGradient>`,
+      )
+
       return [
-        `<circle cx="${x}" cy="15" r="${RING_R}" fill="none" stroke="${palette.muted}" stroke-opacity=".25" stroke-width="3"/>`,
-        `<circle class="fill" cx="${x}" cy="15" r="${RING_R}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-dasharray="${filled} ${circumference}" transform="rotate(-90 ${x} 15)" style="--len:${filled}"/>`,
-        `<text x="${x + RING_R + 8}" y="19.5" font-size="${TEXT_SIZE}"><tspan style="fill:${palette.fg};font-weight:600">${meter.percent}%</tspan><tspan style="fill:${palette.muted}"> ${escape(meter.label)}${meter.resets === undefined ? '' : ` · ${escape(meter.resets)}`}</tspan></text>`,
+        i > 0 ? `<line x1="${x0 - 6}" y1="8" x2="${x0 - 6}" y2="${height - 8}" stroke="${palette.muted}" stroke-opacity=".25" stroke-width="1"/>` : '',
+        `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${palette.muted}" stroke-opacity=".18" stroke-width="${stroke}"/>`,
+        `<circle class="fill" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="url(#g${i})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${filled} ${circumference}" transform="rotate(-90 ${cx} ${cy})" style="--len:${filled}"/>`,
+        `<text x="${x0 + textX}" y="${cy - 1.5}" font-size="${PERCENT_SIZE}" style="fill:${palette.fg};font-weight:700">${meter.percent}%</text>`,
+        `<text x="${x0 + textX}" y="${cy + 12}" font-size="${SUB_SIZE}" style="fill:${palette.muted};letter-spacing:.04em">${escape(subOf(meter))}</text>`,
       ].join('')
     })
     .join('')
@@ -104,7 +121,7 @@ export function usageSvg(meters: readonly Meter[], palette: Palette): { source: 
   ].join('')
 
   return {
-    source: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><style>${style}</style>${items}</svg>`,
+    source: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${defs.join('')}</defs><style>${style}</style>${items}</svg>`,
     width,
     height,
     alt: meters.map(meter => `${meter.label} ${meter.percent}%${meter.resets === undefined ? '' : `, resets in ${meter.resets}`}`).join(', '),
