@@ -906,7 +906,15 @@ function meterView(look: Look, meters: readonly Meter[]) {
     return <Svg source={sourceOf(look, `usage:${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
   }
 
-  const CELLS = 10
+  const CELLS = 12
+
+  // A colour a fraction of the way from `from` to `to`, both `#rrggbb`.
+  const mix = (from: string, to: string, t: number): string => {
+    const ch = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16)
+    const out = [0, 1, 2].map(i => Math.round(ch(from, i) + (ch(to, i) - ch(from, i)) * t).toString(16).padStart(2, '0'))
+
+    return `#${out.join('')}`
+  }
 
   return (
     <Box flexDirection="row" columnGap={3}>
@@ -914,16 +922,21 @@ function meterView(look: Look, meters: readonly Meter[]) {
         const color = meterColor(meter.percent, palette)
         const eighths = Math.round((meter.percent / 100) * CELLS * 8)
         const full = Math.floor(eighths / 8)
-        const partial = ' ▏▎▍▌▋▊▉'[eighths % 8] ?? ' '
-        const rest = CELLS - full - (partial === ' ' ? 0 : 1)
+        const hasEdge = eighths % 8 !== 0
+        const rest = CELLS - full - (hasEdge ? 1 : 0)
+        const at = (i: number) => mix(palette.surface, color, 0.35 + 0.65 * (CELLS <= 1 ? 1 : i / (CELLS - 1)))
 
         return (
           <Text color={palette.muted}>
-            {`${meter.label} `}
-            <Text color={color}>{'█'.repeat(full) + (partial === ' ' ? '' : partial)}</Text>
-            {'░'.repeat(Math.max(0, rest))}
+            <Text color={palette.fg} backgroundColor={palette.surface}>{` ${meter.label} `}</Text>
+            {' '}
+            {Array.from({ length: full }, (_, i) => (
+              <Text color={at(i)}>━</Text>
+            ))}
+            {hasEdge ? <Text color={color}>╸</Text> : ''}
+            {'╌'.repeat(Math.max(0, rest))}
             <Text color={color} bold>{` ${meter.percent}%`}</Text>
-            {meter.resets === undefined ? '' : ` ⟳ ${meter.resets}`}
+            {meter.resets === undefined ? '' : ` · ${meter.resets}`}
           </Text>
         )
       })}
