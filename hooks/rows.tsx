@@ -906,37 +906,27 @@ function meterView(look: Look, meters: readonly Meter[]) {
     return <Svg source={sourceOf(look, `usage:${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
   }
 
-  const CELLS = 12
-
-  // A colour a fraction of the way from `from` to `to`, both `#rrggbb`.
-  const mix = (from: string, to: string, t: number): string => {
-    const ch = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16)
-    const out = [0, 1, 2].map(i => Math.round(ch(from, i) + (ch(to, i) - ch(from, i)) * t).toString(16).padStart(2, '0'))
-
-    return `#${out.join('')}`
-  }
+  // Powerline arrow; needs a Powerline or Nerd Font, which most modern terminals ship or fall back to.
+  const ARROW = '\ue0b0'
+  const CELLS = 6
 
   return (
-    <Box flexDirection="row" columnGap={3}>
+    <Box flexDirection="row" columnGap={2}>
       {meters.map(meter => {
         const color = meterColor(meter.percent, palette)
-        const eighths = Math.round((meter.percent / 100) * CELLS * 8)
-        const full = Math.floor(eighths / 8)
-        const hasEdge = eighths % 8 !== 0
-        const rest = CELLS - full - (hasEdge ? 1 : 0)
-        const at = (i: number) => mix(palette.surface, color, 0.35 + 0.65 * (CELLS <= 1 ? 1 : i / (CELLS - 1)))
+        const filled = Math.round((meter.percent / 100) * CELLS)
+        const hasResets = meter.resets !== undefined
 
         return (
-          <Text color={palette.muted}>
-            <Text color={palette.fg} backgroundColor={palette.surface}>{` ${meter.label} `}</Text>
-            {' '}
-            {Array.from({ length: full }, (_, i) => (
-              <Text color={at(i)}>━</Text>
-            ))}
-            {hasEdge ? <Text color={color}>╸</Text> : ''}
-            {'╌'.repeat(Math.max(0, rest))}
-            <Text color={color} bold>{` ${meter.percent}%`}</Text>
-            {meter.resets === undefined ? '' : ` · ${meter.resets}`}
+          <Text>
+            <Text color={palette.surface} backgroundColor={color} bold>{` ${meter.label} `}</Text>
+            <Text color={color} backgroundColor={palette.surface}>{ARROW}</Text>
+            <Text color={color} backgroundColor={palette.surface}>{` ${'▰'.repeat(filled)}`}</Text>
+            <Text color={palette.muted} backgroundColor={palette.surface}>{'▱'.repeat(CELLS - filled)}</Text>
+            <Text color={palette.fg} backgroundColor={palette.surface} bold>{` ${meter.percent}% `}</Text>
+            {hasResets ? <Text color={palette.surface} backgroundColor={palette.zebra}>{ARROW}</Text> : ''}
+            {hasResets ? <Text color={palette.muted} backgroundColor={palette.zebra}>{` ⟳ ${meter.resets} `}</Text> : ''}
+            <Text color={hasResets ? palette.zebra : palette.surface}>{ARROW}</Text>
           </Text>
         )
       })}
