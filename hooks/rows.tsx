@@ -26,7 +26,7 @@ import { cardWidth, settled } from './svg-kit'
 import { tableSvg } from './svg-table'
 import { terminalSvg } from './svg-terminal'
 import type { ShellOutput } from './svg-terminal'
-import { metersKey, usageLine, usageSvg } from './svg-usage'
+import { meterColor, metersKey, usageSvg } from './svg-usage'
 import { codeRows } from './code-rows'
 import { languageOf } from './highlight'
 import type { Meter } from './svg-usage'
@@ -906,14 +906,27 @@ function meterView(look: Look, meters: readonly Meter[]) {
     return <Svg source={sourceOf(look, `usage:${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
   }
 
+  const CELLS = 10
+
   return (
     <Box flexDirection="row" columnGap={3}>
-      {usageLine(meters).map(meter => (
-        <Text color={palette.muted}>
-          <Text color={palette.user}>{meter.bar}</Text>
-          {` ${meter.text}`}
-        </Text>
-      ))}
+      {meters.map(meter => {
+        const color = meterColor(meter.percent, palette)
+        const eighths = Math.round((meter.percent / 100) * CELLS * 8)
+        const full = Math.floor(eighths / 8)
+        const partial = ' ▏▎▍▌▋▊▉'[eighths % 8] ?? ' '
+        const rest = CELLS - full - (partial === ' ' ? 0 : 1)
+
+        return (
+          <Text color={palette.muted}>
+            {`${meter.label} `}
+            <Text color={color}>{'█'.repeat(full) + (partial === ' ' ? '' : partial)}</Text>
+            {'░'.repeat(Math.max(0, rest))}
+            <Text color={color} bold>{` ${meter.percent}%`}</Text>
+            {meter.resets === undefined ? '' : ` ⟳ ${meter.resets}`}
+          </Text>
+        )
+      })}
     </Box>
   )
 }
