@@ -12,14 +12,17 @@ import noir from '../hooks/themes/noir'
 
 const STOCK: RenderElement = { type: 'Text', props: {}, children: ['stock row'] }
 
-function stub(on: On, copied: string[] = []) {
+function stub(on: On, copied: string[] = [], logs: string[] = []) {
   mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   on('env.get', () => ({ value: undefined }))
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
   on('ui.toast', () => ({ value: undefined }))
-  on('ui.log', () => ({ value: undefined }))
+  on('ui.log', ($, e) => {
+    logs.push(e.text)
+    return { value: undefined }
+  })
   on('ui.copy', ($, e) => {
     copied.push(e.text)
     return { value: { isCopied: true } }
@@ -89,11 +92,30 @@ test('a reply skin-code leaves is drawn as before', async ($, on) => {
   expect(await left.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
 })
 
-test('without skin-code a reply with code is drawn as before', async ($, on) => {
-  stub(on)
+test('without skin-code a reply with code is drawn as before, and nothing is logged', async ($, on) => {
+  const logs: string[] = []
+  stub(on, [], logs)
 
   const ui = await $.ui.mount(reply(TS))
   expect(await ui.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+  expect(logs.filter(text => text.includes('skin-code'))).toEqual([])
+})
+
+test('a skin-code that fails to answer is logged, and the reply drawn as before', async ($, on) => {
+  const logs: string[] = []
+  stub(on, [], logs)
+  on('engine.create', async ($, e, next) => ({
+    ...(await next(e)),
+    skinCode: {
+      draws: async () => {
+        throw new Error('boom')
+      },
+    },
+  }))
+
+  const ui = await $.ui.mount(reply(TS))
+  expect(await ui.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+  expect(logs.filter(text => text.includes('skin-code') && text.includes('boom'))).toHaveLength(1)
 })
 
 const FS_DIFF =

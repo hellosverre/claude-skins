@@ -108,7 +108,10 @@ async function activeSkin($: EngineInterface): Promise<Active | null> {
 }
 
 // Whether the skin-code mod draws this reply's code in a VS Code theme. False when it is not
-// installed (the call throws), is off, or fails to answer.
+// installed, is off, or fails to answer. The loader takes `$.skinCode` only as a call, never
+// read on its own, so a missing mod shows as the TypeError of calling into undefined: that is
+// the normal case without skin-code and says nothing. Any other failure is logged, so a reply
+// skins draws in place of skin-code says why.
 async function drawnBySkinCode($: EngineInterface, text: unknown): Promise<boolean> {
   if (typeof text !== 'string') {
     return false
@@ -116,7 +119,11 @@ async function drawnBySkinCode($: EngineInterface, text: unknown): Promise<boole
 
   try {
     return (await $.skinCode!.draws({ text })) === true
-  } catch {
+  } catch (error) {
+    if (!(error instanceof TypeError)) {
+      $.ui.log(`skin-code did not answer, so skins draws the reply: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' })
+    }
+
     return false
   }
 }
