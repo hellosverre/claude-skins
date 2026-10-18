@@ -59,7 +59,8 @@ To keep it installed but go back to Claude Code's own drawing, run `/skin off`.
 |---|---|
 | `/skin` | Settings: pick a skin with a live preview, toggle parts, repaint any colour |
 | `/skin <name>` | Switch skin: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `rose-pine`, `nord`, `gruvbox`, `kanagawa`, `everforest`, `one-dark`, `solarized`, `night-owl`, `ayu`, `github`, `mono` |
-| `/skin list` | Every skin, yours included |
+| `/skin list` | Every skin, yours included, and every setting |
+| `/skin help` | Every command, in a table |
 | `/skin off` | Back to Claude Code's own drawing |
 | `/skin rail\|shimmer\|band\|countdown\|clip\|markdown\|quiet\|charts\|math\|commands\|shell\|highlight\|hints\|links\|copy\|fold\|expand\|compact on\|off` | Toggle one part |
 | `/skin calm` · `calm off` | No motion, one line per tool row, read-only output folded, failures always whole. `calm off` puts back what you had |

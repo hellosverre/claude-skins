@@ -2,7 +2,7 @@ import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderSurface, Timer } from 'claude-code'
 
 import type { CustomSkin, Disclosure, Prefs, SkinSlot, SkinsMarkdownArgs, Touch, TurnStats, UsageSnap } from '../types'
-import { DEFAULT_PREFS, nextTables, parsePrefs, runSkinCommand, TOGGLES, withCalm } from './command'
+import { DEFAULT_PREFS, listing, nextTables, parsePrefs, runSkinCommand, TOGGLES, withCalm } from './command'
 import { buildCustom, resolveSkin, skinNames, withSlot } from './custom'
 import { forTheme, gnomeDark, macDark, resolveLight, windowsDark } from './light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from './folders'
@@ -605,8 +605,8 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'skin',
-      description: 'Open the skin settings, or /skin <name | list | off>',
-      argumentHint: '[gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | countdown | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | links | fold | expand | compact | icons | prompt | words]',
+      description: 'Open the skin settings, or /skin <name | list | help | off>',
+      argumentHint: '[help | gallery | copy | copy code | name | list | off | calm | pin | unpin | share | rail | tables | shimmer | band | countdown | clip | markdown | quiet | charts | math | commands | shell | highlight | hints | links | fold | expand | compact | icons | prompt | words]',
       immediate: true,
     })
     const designTool = $.tool
@@ -828,19 +828,27 @@ export const register: Register = on => {
 
     const current = await read($, prefsAtom)
     const custom = await read($, customAtom)
-    const outcome = runSkinCommand(e.args, current, skinNames(custom))
+    const names = skinNames(custom)
+
+    if (word === 'list') {
+      const folder = (await read($, pinnedAtom)) ? 'pinned' : 'follows the default'
+
+      return {
+        text: listing(current, names, [
+          ['this folder', folder],
+          ...(lastColumns === undefined ? [] : [['reply width', `${lastColumns} columns`] as const]),
+        ]),
+      }
+    }
+
+    const outcome = runSkinCommand(e.args, current, names)
 
     if (outcome.prefs !== current) {
       await commit($, { prefs: outcome.prefs, custom })
     }
 
     if (outcome.channel === 'row') {
-      const width = lastColumns === undefined ? '' : `
-reply width: ${lastColumns} columns`
-
-      const folder = (await read($, pinnedAtom)) ? 'this folder: pinned' : 'this folder: follows the default'
-
-      return { text: e.args.trim() === 'list' ? `${outcome.message}\n${folder}${width}` : outcome.message }
+      return { text: outcome.message }
     }
 
     $.ui.toast(outcome.message)

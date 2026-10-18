@@ -1,4 +1,5 @@
 import type { CalmSnapshot, Prefs } from '../types'
+import { SKINS } from './themes'
 
 export const DEFAULT_PREFS: Prefs = {
   skin: 'noir',
@@ -141,34 +142,113 @@ const refused = (prefs: Prefs, message: string): Outcome => ({ prefs, message, c
 
 const onOff = (on: boolean): string => (on ? 'on' : 'off')
 
-export const listing = (current: Prefs, names: readonly string[]): string =>
+// A markdown table, its columns padded so it lines up as plain text too.
+export function markdownTable(head: readonly string[], rows: readonly (readonly string[])[]): string {
+  const widths = head.map((title, column) => Math.max(title.length, ...rows.map(row => (row[column] ?? '').length)))
+  const line = (cells: readonly string[]) => `| ${widths.map((width, column) => (cells[column] ?? '').padEnd(width)).join(' | ')} |`
+
+  return [line(head), line(widths.map(width => '-'.repeat(width))), ...rows.map(line)].join('\n')
+}
+
+const isBuiltIn = (name: string): boolean => SKINS.some(skin => skin.name === name)
+
+// /skin list: the skins, then every setting, laid out as skin-code lays out its list.
+// `extra` adds rows to the settings that the command reads from elsewhere.
+export function listing(current: Prefs, names: readonly string[], extra: readonly (readonly [string, string])[] = []): string {
+  const mark = (name: string) => (name === current.skin ? `${name} (current)` : name)
+
+  return [
+    `Skins · now: ${current.skin}`,
+    '',
+    markdownTable(
+      ['Skin', 'Kind'],
+      [
+        ...names.map(name => [mark(name), isBuiltIn(name) ? 'built in' : 'yours']),
+        [mark('off'), 'Claude Code\'s own look'],
+      ],
+    ),
+    '',
+    markdownTable(
+      ['Setting', 'Value'],
+      [
+        ['icons', current.icons],
+        ['prompt', current.prompt],
+        ['words', current.words],
+        ['rail', onOff(current.rail)],
+        ['tables', current.tables],
+        ['shimmer', onOff(current.shimmer)],
+        ['band', onOff(current.band)],
+        ['clip', onOff(current.clipOutput)],
+        ['markdown', onOff(current.markdown)],
+        ['quiet', onOff(current.quiet)],
+        ['charts', onOff(current.charts)],
+        ['math', onOff(current.math)],
+        ['commands', onOff(current.commands)],
+        ['shell', onOff(current.shell)],
+        ['highlight', onOff(current.highlight)],
+        ['hints', onOff(current.hints)],
+        ['links', onOff(current.links)],
+        ['copy', onOff(current.copy)],
+        ['fold', onOff(current.fold)],
+        ['expand', onOff(current.expand)],
+        ['compact', onOff(current.compact)],
+        ['calm', onOff(current.calm !== null)],
+        ...extra,
+      ],
+    ),
+    '',
+    '`/skin <name>` picks a skin.',
+    '',
+    '`/skin help` shows the commands.',
+  ].join('\n')
+}
+
+// /skin help: every argument, laid out as skin-code lays out its help.
+export const helpText = (): string =>
   [
-    ...names.map(name => `${name === current.skin ? '●' : '○'} ${name}`),
-    `${current.skin === 'off' ? '●' : '○'} off`,
-    [
-      `icons ${current.icons}`,
-      `prompt ${current.prompt}`,
-      `words ${current.words}`,
-      `rail ${onOff(current.rail)}`,
-      `tables ${current.tables}`,
-      `shimmer ${onOff(current.shimmer)}`,
-      `band ${onOff(current.band)}`,
-      `clip ${onOff(current.clipOutput)}`,
-      `markdown ${onOff(current.markdown)}`,
-      `quiet ${onOff(current.quiet)}`,
-      `charts ${onOff(current.charts)}`,
-      `math ${onOff(current.math)}`,
-      `commands ${onOff(current.commands)}`,
-      `shell ${onOff(current.shell)}`,
-      `highlight ${onOff(current.highlight)}`,
-      `hints ${onOff(current.hints)}`,
-      `links ${onOff(current.links)}`,
-      `copy ${onOff(current.copy)}`,
-      `fold ${onOff(current.fold)}`,
-      `expand ${onOff(current.expand)}`,
-      `compact ${onOff(current.compact)}`,
-      `calm ${onOff(current.calm !== null)}`,
-    ].join(' · '),
+    'skins commands',
+    '',
+    markdownTable(
+      ['Command', 'What it does'],
+      [
+        ['`/skin`', 'open the settings'],
+        ['`/skin <name>`', 'switch to that skin'],
+        ['`/skin list`', 'every skin and setting'],
+        ['`/skin help`', 'these commands'],
+        ['`/skin off`', 'back to Claude Code\'s own look'],
+        ['`/skin on`', 'skins back on'],
+        ['`/skin gallery`', 'every element the skin draws, numbered'],
+        ['`/skin calm [on/off]`', 'no motion, one line per tool row, read-only output folded'],
+        ['`/skin copy` · `copy code`', 'copy the last reply, or its last code block'],
+        ['`/skin pin` · `unpin` · `share`', 'give this folder its own look, drop it, or make it the default'],
+        ['`/skin tables on/text/off`', 'tables as cards, as selectable text, or Claude Code\'s own'],
+        ['`/skin prompt left/right/plain`', 'which side your prompt\'s outline sits on, or a plain marker'],
+        ['`/skin words claude/skin`', 'whose words the spinner and the turn footer show'],
+        ['`/skin icons unicode/ascii`', 'the icon set'],
+        ['`/skin rail on/off`', 'the coloured rail beside tool rows'],
+        ['`/skin shimmer on/off`', 'the band of light across the spinner word'],
+        ['`/skin band on/off`', 'the usage meters above the prompt'],
+        ['`/skin countdown on/off`', 'time left on each limit in the band'],
+        ['`/skin clip on/off`', 'trim Claude Code\'s own shell output to its head and tail'],
+        ['`/skin markdown on/off`', 'alerts and task lists drawn'],
+        ['`/skin quiet on/off`', 'fold reads, searches and read-only commands to one row'],
+        ['`/skin charts on/off`', 'Mermaid fences as charts'],
+        ['`/skin math on/off`', 'math typeset'],
+        ['`/skin commands on/off`', 'slash-command output as tables and cards'],
+        ['`/skin shell on/off`', 'shell output as a card'],
+        ['`/skin highlight on/off`', 'code blocks highlighted in the skin\'s colours'],
+        ['`/skin hints on/off`', 'tell Claude that charts draw here'],
+        ['`/skin links on/off`', 'URLs and paths as links'],
+        ['`/skin copy on/off`', 'Copy buttons on cards'],
+        ['`/skin fold on/off`', 'long blocks fold behind `▾ N more`'],
+        ['`/skin expand on/off`', 'open every group of reads and searches'],
+        ['`/skin compact on/off`', 'the Compact button in the band'],
+      ],
+    ),
+    '',
+    '`/skin list` shows every skin and setting.',
+    '',
+    '`/skin` opens the settings.',
   ].join('\n')
 
 const isToggle = (word: string): word is ToggleWord => Object.hasOwn(TOGGLES, word)
@@ -188,6 +268,8 @@ export function runSkinCommand(args: string, current: Prefs, names: readonly str
   switch (head) {
     case 'list':
       return refused(current, listing(current, names))
+    case 'help':
+      return refused(current, helpText())
     // `default` and `stock` are what people reach for when they want Claude Code's own look.
     case 'off':
     case 'default':
@@ -222,6 +304,6 @@ export function runSkinCommand(args: string, current: Prefs, names: readonly str
     default:
       return names.includes(head)
         ? changed({ ...current, skin: head }, `skin: ${head}`)
-        : refused(current, `unknown skin "${head}". /skin list shows them`)
+        : refused(current, `unknown skin "${head}". /skin list shows them, /skin help the commands`)
   }
 }

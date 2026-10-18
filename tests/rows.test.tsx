@@ -587,7 +587,7 @@ test('the settings pane picks a skin, switches the rail and paints a slot', asyn
   await again.input({ key: 'hex', text: '#ff0000' })
   await again.unmount()
 
-  expect((await runSkin($, 'list')).text).toContain('● my-dracula')
+  expect((await runSkin($, 'list')).text).toMatch(/\| my-dracula \(current\) +\| yours +\|/)
 })
 
 test('the agent’s design tool saves a skin and it applies at once', async ($, on) => {
@@ -2359,6 +2359,6 @@ test('/skin calm off puts back the settings it changed, and keeps changes made m
   await output.unmount()
 
   const listed = await runSkin($, 'list')
-  expect(JSON.stringify(listed)).toContain('● nord')
-  expect(JSON.stringify(listed)).toContain('calm off')
+  expect(JSON.stringify(listed)).toContain('nord (current)')
+  expect(JSON.stringify(listed)).toMatch(/\| calm +\| off +\|/)
 })

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULT_PREFS, parsePrefs, runSkinCommand, withCalm } from '../hooks/command'
+import { DEFAULT_PREFS, parsePrefs, runSkinCommand, TOGGLES, withCalm } from '../hooks/command'
 import { foldLines, shellResultOf, shellStatus } from '../hooks/shell'
 import { buildCustom, resolveSkin, skinNames, withSlot } from '../hooks/custom'
 import { runDesign } from '../hooks/designer'
@@ -184,7 +184,17 @@ test('/skin names a skin, switches parts, and refuses what it does not know', as
   expect(runSkinCommand('clip on', DEFAULT_PREFS, NAMES).prefs.clipOutput).toBe(true)
   expect(runSkinCommand('shimmer maybe', DEFAULT_PREFS, NAMES).prefs).toBe(DEFAULT_PREFS)
   expect(runSkinCommand('plaid', DEFAULT_PREFS, NAMES).channel).toBe('row')
-  expect(runSkinCommand('list', { ...DEFAULT_PREFS, skin: 'nord' }, NAMES).message).toContain('● nord')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, skin: 'nord' }, NAMES).message).toContain('nord (current)')
+})
+
+test('/skin help lists every command in a table, and changes nothing', async () => {
+  const help = runSkinCommand('help', DEFAULT_PREFS, NAMES)
+  expect(help.prefs).toBe(DEFAULT_PREFS)
+  expect(help.channel).toBe('row')
+  expect(help.message).toMatch(/\| Command +\| What it does +\|/)
+  for (const word of Object.keys(TOGGLES)) {
+    expect(help.message).toContain(`\`/skin ${word} on/off\``)
+  }
 })
 
 test('stored prefs that are stale or hand-edited fall back to defaults', async () => {
@@ -200,7 +210,7 @@ test('tables are on, text or off, and a stored on/off from before still reads', 
   expect(parsePrefs({ tables: 'grid' }, NAMES).tables).toBe('on')
   expect(runSkinCommand('tables text', DEFAULT_PREFS, NAMES).prefs.tables).toBe('text')
   expect(runSkinCommand('tables maybe', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin tables on|text|off')
-  expect(runSkinCommand('list', { ...DEFAULT_PREFS, tables: 'text' }, NAMES).message).toContain('tables text')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, tables: 'text' }, NAMES).message).toMatch(/\| tables +\| text +\|/)
 })
 
 test('the prompt sits left, right or plain, and anything else stored reads as left', async () => {
@@ -213,7 +223,7 @@ test('the prompt sits left, right or plain, and anything else stored reads as le
   expect(runSkinCommand('prompt left', { ...DEFAULT_PREFS, prompt: 'right' }, NAMES).prefs.prompt).toBe('left')
   expect(runSkinCommand('prompt plain', DEFAULT_PREFS, NAMES).prefs.prompt).toBe('plain')
   expect(runSkinCommand('prompt up', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin prompt left|right|plain')
-  expect(runSkinCommand('list', { ...DEFAULT_PREFS, prompt: 'right' }, NAMES).message).toContain('prompt right')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, prompt: 'right' }, NAMES).message).toMatch(/\| prompt +\| right +\|/)
 })
 
 test('words are the skin’s or Claude Code’s, and anything else stored reads as the skin’s', async () => {
@@ -226,7 +236,7 @@ test('words are the skin’s or Claude Code’s, and anything else stored reads 
   expect(runSkinCommand('words skin', { ...DEFAULT_PREFS, words: 'claude' }, NAMES).prefs.words).toBe('skin')
   expect(runSkinCommand('words mine', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin words claude|skin')
   expect(runSkinCommand('words', DEFAULT_PREFS, NAMES).prefs.words).toBe('skin')
-  expect(runSkinCommand('list', { ...DEFAULT_PREFS, words: 'claude' }, NAMES).message).toContain('words claude')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, words: 'claude' }, NAMES).message).toMatch(/\| words +\| claude +\|/)
 })
 
 test('expand opens every tool group, is off by default, and anything but a boolean stored reads as off', async () => {
@@ -237,7 +247,7 @@ test('expand opens every tool group, is off by default, and anything but a boole
   expect(runSkinCommand('expand on', DEFAULT_PREFS, NAMES).prefs.expand).toBe(true)
   expect(runSkinCommand('expand off', { ...DEFAULT_PREFS, expand: true }, NAMES).prefs.expand).toBe(false)
   expect(runSkinCommand('expand maybe', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin expand on|off')
-  expect(runSkinCommand('list', { ...DEFAULT_PREFS, expand: true }, NAMES).message).toContain('expand on')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, expand: true }, NAMES).message).toMatch(/\| expand +\| on +\|/)
 })
 
 test('compact keeps the band’s Compact button by default, and anything but a boolean stored reads as on', async () => {
@@ -248,7 +258,7 @@ test('compact keeps the band’s Compact button by default, and anything but a b
   expect(runSkinCommand('compact off', DEFAULT_PREFS, NAMES).prefs.compact).toBe(false)
   expect(runSkinCommand('compact on', { ...DEFAULT_PREFS, compact: false }, NAMES).prefs.compact).toBe(true)
   expect(runSkinCommand('compact maybe', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin compact on|off')
-  expect(runSkinCommand('list', { ...DEFAULT_PREFS, compact: false }, NAMES).message).toContain('compact off')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, compact: false }, NAMES).message).toMatch(/\| compact +\| off +\|/)
 })
 
 test('cells are read as colours, diffs, numbers, code or text', async () => {
