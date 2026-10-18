@@ -55,23 +55,56 @@ To keep it installed but go back to Claude Code's own drawing, run `/skin off`.
 
 ## Use
 
+`/skin help` lists every command in Claude Code; `/skin list` shows every skin and setting.
+
+**Skins**
+
 | Command | What it does |
 |---|---|
 | `/skin` | Settings: pick a skin with a live preview, toggle parts, repaint any colour |
-| `/skin <name>` | Switch skin: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `rose-pine`, `nord`, `gruvbox`, `kanagawa`, `everforest`, `one-dark`, `solarized`, `night-owl`, `ayu`, `github`, `mono` |
+| `/skin <name>` | Switch skin (names below) |
 | `/skin list` | Every skin, yours included, and every setting |
 | `/skin help` | Every command, in a table |
-| `/skin off` | Back to Claude Code's own drawing |
-| `/skin rail\|shimmer\|band\|countdown\|clip\|markdown\|quiet\|charts\|math\|commands\|shell\|highlight\|hints\|links\|copy\|fold\|expand\|compact on\|off` | Toggle one part |
-| `/skin calm` · `calm off` | No motion, one line per tool row, read-only output folded, failures always whole. `calm off` puts back what you had |
-| `/skin copy` · `copy code` | Copy Claude's last reply, or just its last code block |
-| `/skin tables on\|text\|off` | `text` draws tables and code as selectable text on the desktop |
-| `/skin prompt left\|right\|plain` | In the terminal, which side your prompt's outline sits on, or `plain` for a leading marker instead. The desktop keeps Claude Code's own messages, with copy and rewind |
-| `/skin words claude\|skin` | Whose words the spinner and the turn footer show. `claude` keeps Claude Code's own, whatever the skin says; `skin` (the default) draws the skin's |
-| `/skin expand on\|off` | `on` opens every run of reads and searches, with its rows, instead of the one line `Read 3 · Search 2 ▸` (the `▸` says a click opens it); click the first line to fold a group back to that line, and again to open it. `off` (the default) keeps the line, and a group you open yourself stays open |
-| `/skin compact on\|off` | `on` (the default) puts a Compact button in the band above the prompt, with a nudge from 70% context. `off` leaves the band to the meters; run `/compact` yourself |
+| `/skin off` · `on` | Back to Claude Code's own drawing, or skins back on |
 | `/skin gallery` | Every element the skin draws, numbered, to point at |
 | `/skin pin` · `unpin` · `share` | Give this folder its own look, drop it, or make it the default |
+| `/skin copy` · `copy code` | Copy Claude's last reply, or just its last code block |
+| `/skin calm` · `calm off` | No motion, one line per tool row, read-only output folded, failures always whole; `calm off` puts back what you had |
+
+Built-in skins: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `rose-pine`, `nord`, `gruvbox`,
+`kanagawa`, `everforest`, `one-dark`, `solarized`, `night-owl`, `ayu`, `github`, `mono`.
+
+**Options**
+
+| Command | What it does |
+|---|---|
+| `/skin tables on/text/off` | Tables as cards, as selectable text on the desktop, or Claude Code's own |
+| `/skin prompt left/right/plain` | In the terminal, which side your prompt's outline sits on, or a plain leading marker. The desktop keeps Claude Code's own messages, with copy and rewind |
+| `/skin words claude/skin` | Whose words the spinner and the turn footer show: Claude Code's own, or the skin's (the default) |
+| `/skin icons unicode/ascii` | The icon set, and ASCII-only diagrams in the terminal |
+
+**Parts**, each switched with `/skin <part> on` or `off`:
+
+| Part | What it does |
+|---|---|
+| `rail` | The coloured rail beside tool rows |
+| `shimmer` | The band of light across the spinner word |
+| `band` | The usage meters above the prompt |
+| `countdown` | Time left on each limit in the band |
+| `compact` | The Compact button in the band, with a nudge from 70% context (on by default) |
+| `clip` | Trim Claude Code's own shell output to its head and tail |
+| `markdown` | Alerts and task lists drawn |
+| `quiet` | Reads, searches and read-only commands folded to one row |
+| `charts` | Mermaid fences as charts |
+| `math` | Math typeset |
+| `commands` | Slash-command output as tables and cards |
+| `shell` | Shell output as a card |
+| `highlight` | Code blocks highlighted in the skin's colours |
+| `hints` | Tell Claude that charts draw here |
+| `links` | URLs and paths as links |
+| `copy` | Copy buttons on cards |
+| `fold` | Long blocks fold behind `▾ N more` |
+| `expand` | Every run of reads and searches open, instead of the one line `Read 3 · Search 2 ▸`; off by default |
 
 **Design one with Claude.** Ask "make me a skin that feels like a sunset". skins gives Claude a
 `design` tool, so it builds the skin and applies it while you watch. Repainting a built-in skin saves
