@@ -5,7 +5,8 @@ import { foldLines, linesOf, shellStatus } from './shell'
 import type { Folded, ShellLine, ShellResult } from './shell'
 
 // The terminal's shell card, the text counterpart of the desktop's terminal card: a
-// header with the command and how it ended, stdout, then stderr in the error colour under
+// header with the command and how it ended, on the skin's surface band as a table's header
+// row is, so the command stands apart from what it printed (#80); stdout, then stderr in the error colour under
 // a label of its own, each stream folded to its head and tail.
 
 // How many lines of each stream stay above and below the fold; null keeps every line.
@@ -43,8 +44,8 @@ export function shellRows(look: Look, command: string, result: ShellResult, isEr
 
   return onBorder(
     look,
-    <Box flexDirection="column" borderStyle="round" borderColor={palette.muted} paddingX={1}>
-      <Box flexDirection="row">
+    <Box flexDirection="column" borderStyle="round" borderColor={palette.muted}>
+      <Box key="command" flexDirection="row" paddingX={1} backgroundColor={palette.surface}>
         <Box flexGrow={1} flexShrink={1}>
           <Text wrap="truncate-end">
             <Text color={palette.run}>$ </Text>
@@ -57,15 +58,17 @@ export function shellRows(look: Look, command: string, result: ShellResult, isEr
           <Text color={palette[status.tone]}>{status.text}</Text>
         </Box>
       </Box>
-      {isEmpty ? <Text color={palette.muted}>no output</Text> : ''}
-      {fold(lines.stdout, at.stdout).map(line => row(line))}
-      {lines.stderr.length > 0 && lines.stdout.length > 0 ? <Text color={palette.muted}>stderr</Text> : ''}
-      {fold(lines.stderr, at.stderr).map(line => row(line, `${OUTPUT_FOLD}-err`))}
-      {folds?.open.has(OUTPUT_FOLD) === true && Math.max(lines.stdout.length, lines.stderr.length) > FOLDS_PAST ? (
-        <Button key={OUTPUT_FOLD} label={`${look.prefs.icons === 'ascii' ? '^' : '▴'} less`} plain dimColor onPress={() => folds.toggle(OUTPUT_FOLD)} />
-      ) : (
-        ''
-      )}
+      <Box flexDirection="column" paddingX={1}>
+        {isEmpty ? <Text color={palette.muted}>no output</Text> : ''}
+        {fold(lines.stdout, at.stdout).map(line => row(line))}
+        {lines.stderr.length > 0 && lines.stdout.length > 0 ? <Text color={palette.muted}>stderr</Text> : ''}
+        {fold(lines.stderr, at.stderr).map(line => row(line, `${OUTPUT_FOLD}-err`))}
+        {folds?.open.has(OUTPUT_FOLD) === true && Math.max(lines.stdout.length, lines.stderr.length) > FOLDS_PAST ? (
+          <Button key={OUTPUT_FOLD} label={`${look.prefs.icons === 'ascii' ? '^' : '▴'} less`} plain dimColor onPress={() => folds.toggle(OUTPUT_FOLD)} />
+        ) : (
+          ''
+        )}
+      </Box>
     </Box>,
     { control },
   )

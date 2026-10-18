@@ -130,6 +130,16 @@ test('an opened PowerShell call shows its command and output as the shell card',
   expect(JSON.stringify(await desktop.findAll({ type: 'Svg' }))).toContain('a.ts')
 })
 
+// The command sits on the surface band, as a table's header row does, so it reads apart from its output (#80).
+test('the shell card puts its command on the surface band', async ($, on) => {
+  stubEngine(on)
+
+  const ui = await opened($, call('p3', 'Bash', { command: 'pnpm test' }, { stdout: 'ok', stderr: '', interrupted: false }))
+  const band = (await ui.find({ key: 'command' })) as { props: { backgroundColor?: string } } | undefined
+  expect(band?.props.backgroundColor).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'ok' })).toBeDefined()
+})
+
 test('PowerShell gets the shell card and the clip as Bash does', async ($, on) => {
   const seen: unknown[] = []
   stubEngine(on, seen)
