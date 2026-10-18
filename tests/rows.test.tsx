@@ -1329,7 +1329,8 @@ test('a resume before the session is bound shows no error, and the next row load
   const note = { message: { type: 'user', content: [{ type: 'text', text: 'hi' }] } } as never
 
   await $.classic.SessionStart({ source: 'resume' } as never)
-  expect(logs.filter(text => text.startsWith('not loaded yet:'))).toHaveLength(1)
+  expect(logs.filter(text => text.startsWith('not loaded yet:')), 'the prefs load without the theme').toHaveLength(0)
+  expect(logs.filter(text => text.startsWith('theme not read yet:'))).toHaveLength(1)
 
   // An older kit (the pinned CI build) cannot append a row at all: nothing more to check there.
   isBound = true
@@ -1337,6 +1338,33 @@ test('a resume before the session is bound shows no error, and the next row load
     return
   }
   expect(themeReads, 'the row after the bind reads the theme').toBeGreaterThan(0)
+})
+
+// A terminal /resume appends no row until the next prompt, and $.session.id() can still answer
+// the old session there: the hook's own session_id loads the prefs for the history (#77).
+test('/resume loads the saved prefs from the hook session id, before any row is appended', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  stubEngine(on, { store: true })
+  on('store.get', ($, e) => ({ value: store[e.key] }))
+  on('store.set', ($, e) => {
+    store[e.key] = e.value
+    return { value: undefined }
+  })
+  on('session.id', () => ({ value: 's1' }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+  on('config.list', () => ({ value: [] }))
+  on('classic.SessionStart', () => ({}) as never)
+
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  const colorNow = async (id: string) =>
+    spanColor((await (await $.ui.mount(toolUse(call('Bash', { command: 'ls' }, { tool_use_id: id })))).find({ type: 'Text', text: /Bash/ })) as Found, 'Bash')
+  const before = await colorNow('r1')
+
+  store.prefs = { skin: 'dracula' }
+  await $.classic.SessionStart({ source: 'resume', session_id: 's2' } as never)
+  expect(await colorNow('r2')).not.toBe(before)
 })
 
 test('quiet output folds a read-only call to its row, a failure to its error line', async ($, on) => {

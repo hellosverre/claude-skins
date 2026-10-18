@@ -411,8 +411,26 @@ let loadedFor: string | undefined
 // Undefined where nothing answers for the session's id (a test's engine): then there is nothing to compare.
 const sessionId = ($: EngineInterface): Promise<string | undefined> => $.session.id().catch(() => undefined)
 
-async function reloadIfNewSession($: EngineInterface): Promise<void> {
-  const id = await sessionId($)
+// Set when the theme could not be read yet: before Claude Code binds the session, $.config.list
+// rejects while the prefs already load. The next draw or row reads it again (#77).
+let themePending = false
+
+async function retryTheme($: EngineInterface): Promise<void> {
+  if (!themePending) {
+    return
+  }
+
+  themePending = false
+
+  await followTheme($).catch((error: unknown) => {
+    themePending = true
+    $.ui.log(`theme not read yet: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' })
+  })
+}
+
+// `known` is the id a hook was handed: on /resume, $.session.id() can still answer the old one.
+async function reloadIfNewSession($: EngineInterface, known?: string): Promise<void> {
+  const id = known ?? (await sessionId($))
 
   if (id === undefined || id === loadedFor) {
     return
@@ -420,17 +438,22 @@ async function reloadIfNewSession($: EngineInterface): Promise<void> {
 
   loadedFor = id
 
-  // A resumed scheduled-task session can start before Claude Code has bound it, and
-  // $.config.list rejects until then (#64). Not loaded yet, then: the next append tries again.
+  // A resumed scheduled-task session can start before Claude Code has bound it (#64). Not
+  // loaded yet, then: the next append tries again.
   try {
     await load($)
-    await followTheme($)
   } catch (error) {
     if (loadedFor === id) {
       loadedFor = undefined
     }
     $.ui.log(`not loaded yet: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' })
+
+    return
   }
+
+  // The prefs stand without the theme; only the theme waits for the bind.
+  themePending = true
+  await retryTheme($)
 }
 
 // A pinned folder keeps its prefs to itself; every other folder shares the default.
@@ -671,12 +694,14 @@ export const register: Register = on => {
 
   // Where the guard does not hold it back, this comes first; session.append then finds the session loaded.
   on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
-    await reloadIfNewSession($)
+    await reloadIfNewSession($, typeof e.session_id === 'string' && e.session_id !== '' ? e.session_id : undefined)
 
     return next(e)
   })
 
   on('ui.invalidate', async ($, e, next) => {
+    await retryTheme($)
+
     if (e.event === 'ui.render' && !(await settleEntrances($, true)) && refusals <= FAST_RETRIES) {
       await $.clock.sleep(FRAME_MS / 3)
       await settleEntrances($, true)
@@ -713,6 +738,7 @@ export const register: Register = on => {
   // so their row keeps Claude Code's drawing of them.
   on('session.append', async ($, e, next) => {
     await reloadIfNewSession($)
+    await retryTheme($)
     const stored = await next(e)
     const hasImage = e.door === 'prompt' && e.message.content.some(block => block.type === 'image')
 
