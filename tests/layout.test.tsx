@@ -118,6 +118,23 @@ test('a skin-code that fails to answer is logged, and the reply drawn as before'
   expect(logs.filter(text => text.includes('skin-code') && text.includes('boom'))).toHaveLength(1)
 })
 
+test('a TypeError inside skin-code is logged, not taken for skin-code missing', async ($, on) => {
+  const logs: string[] = []
+  stub(on, [], logs)
+  on('engine.create', async ($, e, next) => ({
+    ...(await next(e)),
+    skinCode: {
+      draws: async () => {
+        throw new TypeError('bad theme')
+      },
+    },
+  }))
+
+  const ui = await $.ui.mount(reply(TS))
+  expect(await ui.find({ type: 'Text', text: 'stock row' })).toBeUndefined()
+  expect(logs.filter(text => text.includes('skin-code') && text.includes('bad theme'))).toHaveLength(1)
+})
+
 const FS_DIFF =
   '```diff\n--- a/Foo.fs\n+++ b/Foo.fs\n@@ -1,2 +1,3 @@\n let foo (bar: decimal) =\n-    if bar < 0m then Error "baz" else Ok bar\n+    match bar with\n+    | v -> Ok v\n```'
 
