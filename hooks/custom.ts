@@ -74,6 +74,7 @@ export function resolveSkin(name: string, custom: Customs): Skin | undefined {
     palette: { ...base.palette, ...made.palette },
     spinner: made.spinner.length > 0 ? made.spinner : base.spinner,
     done: made.done.length > 0 ? made.done : base.done,
+    ...(base.ansi === undefined ? {} : { ansi: { ...base.ansi, ...made.palette } }),
   }
 }
 

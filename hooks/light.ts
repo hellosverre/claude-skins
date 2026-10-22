@@ -40,8 +40,20 @@ export function toLight(palette: Palette): Palette {
   }
 }
 
-export const forTheme = (skin: Skin, isLight: boolean): Skin =>
-  isLight ? { ...skin, palette: skin.light ?? toLight(skin.palette) } : skin
+const lightAnsi = (ansi: Palette, light: Palette): Palette =>
+  Object.fromEntries(
+    Object.entries(ansi).map(([slot, value]) => [slot, value.startsWith('#') ? light[slot as keyof Palette] : value]),
+  ) as Palette
+
+export function forTheme(skin: Skin, isLight: boolean): Skin {
+  if (!isLight) {
+    return skin
+  }
+
+  const palette = skin.light ?? toLight(skin.palette)
+
+  return { ...skin, palette, ...(skin.ansi === undefined ? {} : { ansi: lightAnsi(skin.ansi, palette) }) }
+}
 
 // Claude Code's theme names say light or dark in them: `light`, `light-daltonized`, ...
 export const isLightTheme = (value: unknown): boolean => typeof value === 'string' && value.includes('light')

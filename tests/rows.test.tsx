@@ -166,6 +166,24 @@ async function closeRow($: Engine, id: string, tool = 'Bash') {
   await row.unmount()
 }
 
+test('the terminal skin paints rows in the terminal\u2019s ANSI colours and bands in Claude Code\u2019s theme', async ($, on) => {
+  stubEngine(on)
+  await runSkin($, 'terminal')
+
+  const row = await $.ui.mount(toolUse(call('Bash', { command: 'pnpm test' }), 'terminal'))
+  expect(spanColor((await row.find({ type: 'Text', text: /Bash/ })) as Found, 'Bash')).toBe('ansi256(3)')
+  await row.unmount()
+
+  const table = await $.ui.mount(tableReply('terminal'))
+  const bands = ((await table.findAll({ type: 'Box' })) as { props: { backgroundColor?: unknown } }[]).map(box => box.props.backgroundColor)
+  expect(bands).toContain('userMessageBackground')
+  await table.unmount()
+
+  const desktop = await $.ui.mount(toolUse(call('Bash', { command: 'pnpm test' }), 'desktop'))
+  expect(spanColor((await desktop.find({ type: 'Text', text: /Bash/ })) as Found, 'Bash')).toMatch(/^#[0-9a-f]{6}$/)
+  await desktop.unmount()
+})
+
 test('a Bash call is a node on the terminal\u2019s rail and an icon row on the desktop', async ($, on) => {
   stubEngine(on)
 

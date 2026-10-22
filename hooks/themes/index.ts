@@ -12,6 +12,7 @@ import nord from './nord'
 import oneDark from './one-dark'
 import rosePine from './rose-pine'
 import solarized from './solarized'
+import terminal from './terminal'
 import tokyoNight from './tokyo-night'
 import type { Skin } from '../skin'
 
@@ -32,4 +33,5 @@ export const SKINS: readonly Skin[] = [
   ayu,
   nightOwl,
   mono,
+  terminal,
 ]

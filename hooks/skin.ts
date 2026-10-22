@@ -21,6 +21,7 @@ export type Skin = {
   readonly done: readonly string[]
   // Its own palette for a light background; without one, light.ts derives it.
   readonly light?: Palette
+  readonly ansi?: Palette
 }
 
 export type IconSet = 'unicode' | 'ascii'

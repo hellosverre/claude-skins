@@ -13,7 +13,7 @@ import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/sv
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
 import { countdownOf, countdownsOf, limitLabel, meterColor, metersKey, metersOf, usageSvg } from '../hooks/svg-usage'
 import { isNewer, starStep, updateNotice } from '../hooks/updates'
-import { deepen, gnomeDark, isLightTheme, macDark, resolveLight, toLight, windowsDark } from '../hooks/light'
+import { deepen, forTheme, gnomeDark, isLightTheme, macDark, resolveLight, toLight, windowsDark } from '../hooks/light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
 import { SKINS } from '../hooks/themes'
@@ -27,6 +27,7 @@ import { mathSvg } from '../hooks/svg-math'
 import { chartArt } from '../hooks/chart-art'
 import { blockBar, dotRule } from '../hooks/chart-rows'
 import { seriesColor } from '../hooks/svg-chart-kit'
+import noir from '../hooks/themes/noir'
 import rosePine from '../hooks/themes/rose-pine'
 
 const NAMES = ['tokyo-night', 'dracula', 'nord']
@@ -148,6 +149,42 @@ test('a made skin lays its slots over its base, and bad drafts are refused with 
   expect(buildCustom({ name: 'dracula' }, undefined)).toContain('built-in')
   expect(buildCustom({ name: 'x', palette: { user: 'red' } }, undefined)).toContain('bad palette')
   expect(buildCustom({ name: 'x', base: 'nope' }, undefined)).toContain('base must be')
+})
+
+test('the terminal skin paints the terminal in its own ANSI colours and keeps hex for the desktop', async () => {
+  const skin = resolveSkin('terminal', {})
+  const ansi = Object.values(skin?.ansi ?? {})
+
+  expect(ansi.length).toBe(Object.keys(noir.palette).length)
+  expect(ansi.every(color => /^ansi256\((\d|1[0-5])\)$/.test(color) || /^[a-zA-Z]+$/.test(color))).toBe(true)
+  expect(skin?.ansi?.fg).toBe('text')
+  expect(skin?.ansi?.surface).toBe('userMessageBackground')
+  expect(skin?.ansi?.zebra).toBe('bashMessageBackgroundColor')
+  expect(Object.values(skin?.palette ?? {}).every(color => /^#[0-9a-f]{6}$/.test(color))).toBe(true)
+  expect(forTheme(skin!, true).ansi).toEqual(skin?.ansi)
+})
+
+test('a slot painted on the terminal skin replaces that ANSI colour and keeps the rest', async () => {
+  const made = withSlot('terminal', {}, 'user', '#ff8800')
+  const custom = typeof made === 'string' ? {} : { [made.name]: made.skin }
+  const skin = resolveSkin('my-terminal', custom)
+
+  expect(skin?.ansi?.user).toBe('#ff8800')
+  expect(skin?.ansi?.run).toBe(resolveSkin('terminal', {})?.ansi?.run)
+  expect(skin?.palette.user).toBe('#ff8800')
+  expect(resolveSkin('my-nord', { 'my-nord': buildCustom({ name: 'my-nord', base: 'nord' }, undefined) as never })?.ansi).toBeUndefined()
+})
+
+test('on a light background a hex slot on the terminal skin turns light, and its ANSI slots stay', async () => {
+  const made = buildCustom({ name: 'sunset', base: 'terminal', palette: { fg: '#f0e6d2', user: '#ff8800' } }, undefined)
+  const skin = resolveSkin('sunset', { sunset: made as Exclude<typeof made, string> })
+  const light = forTheme(skin!, true)
+
+  expect(light.ansi?.fg).toBe(light.palette.fg)
+  expect(light.ansi?.user).toBe(light.palette.user)
+  expect(light.ansi?.user).not.toBe('#ff8800')
+  expect(light.ansi?.run).toBe('ansi256(3)')
+  expect(light.ansi?.surface).toBe('userMessageBackground')
 })
 
 test('painting a slot on a built-in skin forks it into my-<name>', async () => {
@@ -483,7 +520,7 @@ test('every built-in skin names itself once and fills every slot with a colour, 
   const hex = /^#[0-9a-f]{6}$/
   const slots = Object.keys(tokyoNight.palette)
 
-  expect(SKINS.length).toBe(15)
+  expect(SKINS.length).toBe(16)
   expect(new Set(SKINS.map(skin => skin.name)).size).toBe(SKINS.length)
 
   for (const skin of SKINS) {

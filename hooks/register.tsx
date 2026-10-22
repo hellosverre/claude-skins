@@ -224,7 +224,7 @@ const lookOf = (
   copy?: (text: string) => void,
 ): Look => ({
   ui,
-  skin: active.skin,
+  skin: surface === 'terminal' && active.skin.ansi !== undefined ? { ...active.skin, palette: active.skin.ansi } : active.skin,
   icons: ICONS[active.prefs.icons],
   prefs: active.prefs,
   surface,

@@ -11,7 +11,7 @@
   <img alt="Claude Code 2.1.287+" src="https://img.shields.io/badge/Claude%20Code-2.1.287%2B-555?style=flat-square">
 </p>
 
-<p align="center">Tool calls with icons and timings, edits as diff cards, tables, code and Mermaid charts as cards,<br>a live usage band, and fifteen skins you can repaint or have Claude design for you.</p>
+<p align="center">Tool calls with icons and timings, edits as diff cards, tables, code and Mermaid charts as cards,<br>a live usage band, and sixteen skins you can repaint or have Claude design for you.</p>
 
 <img alt="Claude Code switching skins with /skin: a coding turn in Noir and Tokyo Night, then Mermaid chart cards in Dracula (xy chart), Catppuccin (sankey), Rosé Pine (radar) and Gruvbox (treemap)" src="docs/demo.gif">
 
@@ -72,7 +72,7 @@ To keep it installed but go back to Claude Code's own drawing, run `/skin off`.
 | `/skin calm` · `calm off` | No motion, one line per tool row, read-only output folded, failures always whole; `calm off` puts back what you had |
 
 Built-in skins: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `rose-pine`, `nord`, `gruvbox`,
-`kanagawa`, `everforest`, `one-dark`, `solarized`, `night-owl`, `ayu`, `github`, `mono`.
+`kanagawa`, `everforest`, `one-dark`, `solarized`, `night-owl`, `ayu`, `github`, `mono`, `terminal`.
 
 **Options**
 
@@ -170,6 +170,11 @@ and the permission prompt keep Claude Code's own drawing.
 **Light and dark.** Every skin has both and follows Claude Code's theme. On `auto` it follows your
 terminal (`COLORFGBG`) or the system. Force one with `SKINS_THEME=light` or `SKINS_THEME=dark`.
 
+**Your terminal's colours.** The `terminal` skin paints the terminal in its own 16-colour palette
+(`ansi256(0)` to `ansi256(15)`), so it follows whatever theme the terminal has, light or dark. Body
+text and table bands use Claude Code's own theme colours; pick an ANSI theme in `/config` to have
+those follow the terminal too. The desktop app has no terminal palette and draws it as `noir`.
+
 ## For other mods
 
 skins adds `$.skins.markdown` to `$`. It draws markdown the way skins draws a reply, in the person's skin. It answers a tree, or `undefined` when skins is off or the text holds nothing it draws, and throws on a malformed argument. It draws no copy or fold controls, because a press cannot cross from one mod's tree to another's. List `skins` under `dependencies` in your `plugin.json` and Claude Code lays its types into your `.claude-plugin/types/`.
@@ -230,7 +235,7 @@ the README does not say.
 | How | Function-hooks plugin | Function-hooks plugin | Function-hooks plugin, a Prismantis fork | Patches Claude Code's JavaScript; reapply after each update | Function-hooks mod | Status line command |
 | Claude Code | 2.1.287+ | 2.1.287+ | 2.1.289+ | Verified on 2.1.162 | 2.1.286+ | |
 | Platforms named | Windows by hand, Linux by tests; CI on Linux, Windows, macOS ([compat](docs/compat.md)) | macOS terminal by hand; CI on macOS, Linux, Windows | | Windows, macOS, Linux | Terminal and desktop app | Windows guide in its docs |
-| Themes | 15, repaint any colour, or have Claude design one | 15 and `mono`, 20 colour slots | 15 | Your own, for Claude Code's whole UI | | Powerline themes |
+| Themes | 16, repaint any colour, or have Claude design one | 15 and `mono`, 20 colour slots | 15 | Your own, for Claude Code's whole UI | | Powerline themes |
 | Recolours Claude Code's own UI | No | No | No | **Yes** | No | No |
 | Tool rows | Icons, timings, rail; **open to the input and answer** | 4 styles | | | No | No |
 | Read-only output hidden | `/skin quiet` | `toolOutput: quiet` | | | No | No |
