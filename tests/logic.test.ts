@@ -2,7 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULT_PREFS, parsePrefs, runSkinCommand, TOGGLES, withCalm } from '../hooks/command'
 import { foldLines, shellResultOf, shellStatus } from '../hooks/shell'
-import { buildCustom, resolveSkin, skinNames, withSlot } from '../hooks/custom'
+import { buildCustom, resolveSkin, SLOT_HELP, SLOTS, skinNames, withSlot } from '../hooks/custom'
+import { colourOf } from '../hooks/skin'
 import { runDesign } from '../hooks/designer'
 import { clipLines, diffstat, formatDuration, formatMs, pick, shortenPath } from '../hooks/format'
 import { columnWidths, copyOf, cutCell, hardBreaks, padCell, splitReply, widthOf, wrapLines } from '../hooks/markdown'
@@ -149,6 +150,22 @@ test('a made skin lays its slots over its base, and bad drafts are refused with 
   expect(buildCustom({ name: 'dracula' }, undefined)).toContain('built-in')
   expect(buildCustom({ name: 'x', palette: { user: 'red' } }, undefined)).toContain('bad palette')
   expect(buildCustom({ name: 'x', base: 'nope' }, undefined)).toContain('base must be')
+})
+
+test('border is an optional slot: no built-in sets it, a made skin may, and its light palette is deepened', async () => {
+  expect(SLOTS).toContain('border')
+  expect(SLOT_HELP.border).toContain('muted')
+  expect(SKINS.every(skin => skin.palette.border === undefined && skin.light?.border === undefined)).toBe(true)
+  expect(colourOf(tokyoNight.palette, 'border'), 'unset, it reads as muted').toBe(tokyoNight.palette.muted)
+  expect(toLight(tokyoNight.palette).border, 'a light palette gains none of its own').toBeUndefined()
+
+  const made = buildCustom({ name: 'sunset', base: 'gruvbox', palette: { border: '#FF8800' } }, undefined)
+  const skin = resolveSkin('sunset', { sunset: made as Exclude<typeof made, string> })
+
+  expect(skin?.palette.border).toBe('#ff8800')
+  expect(colourOf(skin!.palette, 'border')).toBe('#ff8800')
+  expect(forTheme(skin!, true).palette.border).toBe(deepen('#ff8800', 0.45))
+  expect(buildCustom({ name: 'x', palette: { border: 'red' } }, undefined)).toContain('bad palette')
 })
 
 test('the terminal skin paints the terminal in its own ANSI colours and keeps hex for the desktop', async () => {

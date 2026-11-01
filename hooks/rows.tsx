@@ -15,6 +15,7 @@ import type { Art } from './mermaid-art'
 import type { Chart } from './mermaid'
 import { blockRows } from './prose'
 import { MAX_MARKDOWN } from './reply'
+import { colourOf } from './skin'
 import type { Icons, Kind, Skin } from './skin'
 import { spinnerColor, spinnerIcon, toolIcon } from './icons'
 import type { SpinnerMode } from './icons'
@@ -314,7 +315,7 @@ export function promptRow(look: Look, text: string, images?: ReturnType<Ui['Text
 
   return (
     <Box flexDirection="column" alignItems={look.prefs.prompt === 'right' ? 'flex-end' : 'flex-start'} marginY={1}>
-      <Box {...(plain ? {} : { borderStyle: 'round' as const, borderColor: look.skin.palette.muted, paddingX: 1 })} flexShrink={1}>
+      <Box {...(plain ? {} : { borderStyle: 'round' as const, borderColor: colourOf(look.skin.palette, 'border'), paddingX: 1 })} flexShrink={1}>
         {plain ? <Text color={look.skin.palette.user}>{`${look.icons.prompt} `}</Text> : ''}
         {markdown === null || markdown.length > MAX_MARKDOWN ? (
           <Text color={look.skin.palette.fg}>{text}</Text>

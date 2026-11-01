@@ -38,6 +38,9 @@ every change shows on screen the moment the call returns.
   dark. Keep `muted` clearly readable: it carries commands, paths and timings.
 - **Quiet bands.** `surface` and `zebra` are backgrounds behind table rows. Keep them one small step
   off a dark background, never bright, or tables turn into stripes.
+- **A prompt box that stands out.** `border` is the outline around the person's typed prompt. Leave it
+  out and the box follows `muted`, as it does in every built-in skin; set it when they want the box
+  to read as part of the look without brightening `muted`, which also paints commands and paths.
 - **Kinds told apart.** `read`, `write`, `run`, `search`, `web` and `mcp` colour tool names. Give the
   common ones (`run`, `write`, `read`) clearly different hues.
 - **Status stays conventional.** Keep `ok` green-ish and `err` red-ish whatever the theme.

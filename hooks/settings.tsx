@@ -4,6 +4,7 @@ import type { SkinSlot } from '../types'
 import type { ToggleWord } from './command'
 import { SLOTS } from './custom'
 import type { Table } from './markdown'
+import { colourOf } from './skin'
 import { footerRow, groupRow, promptRow, tableRows, toolRow } from './rows'
 import type { Look } from './rows'
 
@@ -138,7 +139,7 @@ export function settingsPane(look: Look, ui: PaneUi, model: SettingsModel, actio
         <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
           {SLOTS.map(slot => (
             <Text>
-              <Text backgroundColor={palette[slot]}>{'  '}</Text>
+              <Text backgroundColor={colourOf(palette, slot)}>{'  '}</Text>
               <Text color={slot === model.editing ? palette.fg : palette.muted} bold={slot === model.editing}>
                 {` ${slot}`}
               </Text>
@@ -155,7 +156,7 @@ export function settingsPane(look: Look, ui: PaneUi, model: SettingsModel, actio
           />
           <Input
             key="hex"
-            label={palette[model.editing]}
+            label={colourOf(palette, model.editing)}
             placeholder="#rrggbb"
             value=""
             submitLabel="paint"
