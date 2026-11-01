@@ -6,6 +6,7 @@ import { DESIGN_TOOL } from '../hooks/designer'
 import { widthOf } from '../hooks/markdown'
 import { mermaidArt } from '../hooks/mermaid-art'
 import { literal } from '../hooks/rows'
+import { contextPercent } from '../hooks/register'
 import { cardWidth } from '../hooks/svg-kit'
 import noir from '../hooks/themes/noir'
 
@@ -1079,6 +1080,27 @@ test('the band offers Compact, nudges at 70% context, and compacts on a press', 
 
   const busy = await $.ui.mount(BAND('terminal', true))
   expect(await busy.find({ key: 'compact' })).toBeUndefined()
+})
+
+test('the context ring reads against the auto-compact window, not the model window', async ($, on) => {
+  stubEngine(on, { usage: true })
+  // Opus with a 1M window and auto-compact at 400k: 218k in use is 55%, not 22%.
+  on('session.usage', () => ({
+    value: { startedAt: 0, context: { window: 1_000_000, tokens: 218_300, percent: 22, breakdown: { rawMaxTokens: 400_000 } } as never, rateLimits: [] },
+  }))
+  await startDesktop($, on)
+
+  const band = await $.ui.mount(BAND('desktop', false))
+  const source = await svgSource(band)
+  expect(source).toContain('55%')
+  expect(source).not.toContain('22%')
+})
+
+test('the context ring keeps the plain figure when no smaller compaction window is set', () => {
+  expect(contextPercent({ window: 200_000, tokens: 84_000, percent: 42, breakdown: { rawMaxTokens: 200_000 } } as never)).toBe(42)
+  expect(contextPercent({ window: 200_000, percent: 42 })).toBe(42)
+  expect(contextPercent({ window: 200_000 })).toBe(null)
+  expect(contextPercent({ window: 1_000_000, tokens: 450_000, breakdown: { rawMaxTokens: 400_000 } } as never)).toBe(100)
 })
 
 // Three meters, the context full enough for the nudge.

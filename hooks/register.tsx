@@ -1,5 +1,5 @@
 import { atom, memberOf, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, RenderSurface, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderSurface, SessionContextUsage, Timer } from 'claude-code'
 
 import type { CustomSkin, Disclosure, Prefs, SkinSlot, SkinsMarkdownArgs, Touch, TurnStats, UsageSnap } from '../types'
 import { DEFAULT_PREFS, listing, nextTables, parsePrefs, runSkinCommand, TOGGLES, withCalm } from './command'
@@ -498,10 +498,25 @@ async function runFolderCommand($: EngineInterface, word: string): Promise<strin
   }
 }
 
+// The context ring reads against the window compaction runs at, as /context and the
+// desktop Context panel do. The plain figure is against the model's whole window, so with
+// auto-compact set lower the nudge and the warning colours could never come before the
+// engine compacted on its own.
+export function contextPercent(context: SessionContextUsage): number | null {
+  const compactsAt = context.breakdown?.rawMaxTokens
+
+  if (context.tokens !== undefined && compactsAt !== undefined && compactsAt > 0 && compactsAt < context.window) {
+    return Math.min(100, Math.round((context.tokens / compactsAt) * 100))
+  }
+
+  return context.percent ?? null
+}
+
 async function refreshUsage($: EngineInterface): Promise<void> {
-  const usage = await $.session.usage()
+  // A summary breakdown is counted locally; it is asked for only for its window.
+  const usage = await $.session.usage({ breakdown: 'summary' })
   const snap: UsageSnap = {
-    context: usage.context.percent ?? null,
+    context: contextPercent(usage.context),
     limits: usage.rateLimits.map(limit => {
       const resetsAt = limit.resetsAt === undefined ? NaN : Date.parse(limit.resetsAt)
 
