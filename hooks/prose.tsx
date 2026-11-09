@@ -57,7 +57,7 @@ function runText(look: Look, run: Run) {
       strikethrough={run.style === 'strike'}
       {...(run.style === 'code' ? { backgroundColor: palette.surface } : {})}
     >
-      {run.text}
+      {run.style === 'code' ? ` ${run.text} ` : run.text}
     </Text>
   )
 }

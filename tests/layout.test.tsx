@@ -143,6 +143,15 @@ async function token(ui: { findAll: (q: { type: string }) => Promise<unknown[]> 
   return ((await ui.findAll({ type: 'Text' })) as Node[]).find(node => node.children?.length === 1 && node.children[0] === word)
 }
 
+test('inline code sits on its band with a cell of room each side', async ($, on) => {
+  stub(on)
+  await skin($, 'noir')
+
+  const ui = await $.ui.mount(reply('Run `npm test` before you push'))
+  expect((await token(ui, ' npm test '))?.props.backgroundColor).toBe(noir.palette.surface)
+  expect(await token(ui, 'npm test')).toBeUndefined()
+})
+
 test('a diff fence highlights its code in the language its path names, the markers in the change colours', async ($, on) => {
   stub(on)
   await skin($, 'dracula')
