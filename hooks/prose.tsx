@@ -1,5 +1,6 @@
 import type { AlertType, Block, Line, Run, RunStyle, Task } from './blocks'
 import { safeHref, touchOf } from './links'
+import { isDarkText } from './light'
 import { hardBreaks } from './markdown'
 import type { Look } from './rows'
 import type { Palette } from './skin'
@@ -49,9 +50,11 @@ function runText(look: Look, run: Run) {
     )
   }
 
+  const color = run.style === 'code' && look.prefs.code === 'accent' ? accentRed(palette) : slot === undefined ? palette.fg : palette[slot]
+
   return (
     <Text
-      color={slot === undefined ? palette.fg : palette[slot]}
+      color={color}
       bold={run.style === 'bold'}
       italic={run.style === 'italic'}
       strikethrough={run.style === 'strike'}
@@ -61,6 +64,12 @@ function runText(look: Look, run: Run) {
     </Text>
   )
 }
+
+// The accent red for inline code, as Notion draws it: deepened on a light background to
+// read at 4.5:1 or better on the band (#ededed), lighter on a dark one.
+export const ACCENT_RED = { light: '#b03a2e', dark: '#f28b82' } as const
+
+const accentRed = (palette: Palette): string => (isDarkText(palette.fg) ? ACCENT_RED.light : ACCENT_RED.dark)
 
 function lineRow(look: Look, line: Line) {
   const { Box, Text } = look.ui

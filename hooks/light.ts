@@ -15,6 +15,17 @@ const channels = (hex: string): [number, number, number] => [
 const toHex = (rgb: readonly number[]): string =>
   `#${rgb.map(value => Math.round(Math.max(0, Math.min(255, value))).toString(16).padStart(2, '0')).join('')}`
 
+// Whether `hex` is a colour for text on a light background: a palette's `fg` tells light from dark.
+export function isDarkText(hex: string): boolean {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) {
+    return false
+  }
+
+  const [r, g, b] = channels(hex)
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128
+}
+
 // `amount` of the way from `hex` to black.
 export const deepen = (hex: string, amount: number): string =>
   toHex(channels(hex).map(value => value * (1 - amount)))

@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { diffFenceTag, fenceDiff, newOnly } from '../hooks/diff-fence'
 import { DEFAULT_PREFS } from '../hooks/command'
+import { ACCENT_RED } from '../hooks/prose'
 import { replySegments } from '../hooks/reply'
 import dracula from '../hooks/themes/dracula'
 import noir from '../hooks/themes/noir'
@@ -150,6 +151,21 @@ test('inline code sits on its band with a cell of room each side', async ($, on)
   const ui = await $.ui.mount(reply('Run `npm test` before you push'))
   expect((await token(ui, ' npm test '))?.props.backgroundColor).toBe(noir.palette.surface)
   expect(await token(ui, 'npm test')).toBeUndefined()
+})
+
+test('/skin code accent draws inline code as a red word on its band, /skin code skin in the skin’s colour', async ($, on) => {
+  stub(on)
+  await skin($, 'noir')
+
+  const before = await $.ui.mount(reply('Run `npm test` before you push'))
+  expect((await token(before, ' npm test '))?.props.color).toBe(noir.palette.search)
+  await before.unmount()
+
+  await skin($, 'code accent')
+  const ui = await $.ui.mount(reply('Run `npm test` before you push', 'terminal', 100, 'm2'))
+  expect((await token(ui, ' npm test '))?.props.color).toBe(ACCENT_RED.dark)
+  expect((await token(ui, ' npm test '))?.props.backgroundColor).toBe(noir.palette.surface)
+  expect(await ui.find({ type: 'Text', text: 'before you push' })).toBeDefined()
 })
 
 test('a diff fence highlights its code in the language its path names, the markers in the change colours', async ($, on) => {

@@ -410,6 +410,21 @@ test('/skin prompt plain draws the prompt without an outline, and the settings p
   await pane.unmount()
 })
 
+test('the settings pane switches inline code between the skin’s colour and the accent red', async ($, on) => {
+  stubEngine(on)
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const press = async () => {
+    await pane.press({ key: 'code' })
+
+    return (await pane.find({ key: 'code' }))?.props.label
+  }
+
+  expect((await pane.find({ key: 'code' }))?.props.label).toBe('code skin')
+  expect(await press()).toBe('code accent')
+  expect(await press()).toBe('code skin')
+  await pane.unmount()
+})
+
 test('a reply with a table draws the table, a reply without one keeps its own drawing', async ($, on) => {
   stubEngine(on)
 

@@ -927,6 +927,7 @@ export const register: Register = on => {
         void commit($, { ...state, prefs: { ...prefs, icons: prefs.icons === 'unicode' ? 'ascii' : 'unicode' } }),
       prompt: () => void commit($, { ...state, prefs: { ...prefs, prompt: PROMPT_NEXT[prefs.prompt] } }),
       words: () => void commit($, { ...state, prefs: { ...prefs, words: prefs.words === 'skin' ? 'claude' : 'skin' } }),
+      code: () => void commit($, { ...state, prefs: { ...prefs, code: prefs.code === 'skin' ? 'accent' : 'skin' } }),
       edit: slot => void update($, editingAtom, () => slot),
       paint: hex => {
         const made = withSlot(prefs.skin === 'off' ? DEFAULT_PREFS.skin : prefs.skin, custom, editing, hex)

@@ -27,6 +27,9 @@ export type Prefs = {
   // Whose words the spinner and the turn footer show: 'claude' keeps Claude Code's own,
   // whatever the skin says; 'skin' draws the skin's.
   words: 'claude' | 'skin'
+  // How inline code reads: 'skin' in the skin's own colour on its band, 'accent' as a red word
+  // on the band, as Notion draws it.
+  code: 'skin' | 'accent'
   rail: boolean
   // 'text' keeps the skin but draws tables and code as text the desktop can select.
   tables: 'on' | 'text' | 'off'
