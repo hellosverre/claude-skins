@@ -487,11 +487,20 @@ test('a light palette is derived with dark text, light bands and deepened colour
   const light = toLight(tokyoNight.palette)
 
   expect(light.fg).toBe('#1f1f1f')
-  expect(light.surface).toBe('#ffffff')
+  expect(light.surface).toBe('#ededed')
   expect(light.run).toBe(deepen(tokyoNight.palette.run, 0.45))
   expect(deepen('#ffffff', 0.5)).toBe('#808080')
   expect(isLightTheme('light-daltonized')).toBe(true)
   expect(isLightTheme('dark')).toBe(false)
+})
+
+test('every light palette draws its bands a step off a white background', async () => {
+  for (const skin of SKINS.filter(each => each.ansi === undefined)) {
+    const { surface, zebra } = forTheme(skin, true).palette
+
+    expect([skin.name, surface]).not.toEqual([skin.name, '#ffffff'])
+    expect([skin.name, zebra]).not.toEqual([skin.name, '#ffffff'])
+  }
 })
 
 test('SKINS_THEME wins, then the theme, then the terminal and the system for auto', async () => {
