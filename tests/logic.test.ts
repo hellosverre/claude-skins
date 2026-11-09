@@ -13,7 +13,7 @@ import { fitColumns, kindOfCell, measure, tableSvg, wrapCell } from '../hooks/sv
 import { outputLines, shellOutputOf, terminalSvg } from '../hooks/svg-terminal'
 import { countdownOf, countdownsOf, limitLabel, meterColor, metersKey, metersOf, usageSvg } from '../hooks/svg-usage'
 import { isNewer, starStep, updateNotice } from '../hooks/updates'
-import { deepen, forTheme, gnomeDark, isLightTheme, macDark, resolveLight, toLight, windowsDark } from '../hooks/light'
+import { deepen, forTheme, gnomeDark, isDarkText, isLightTheme, macDark, resolveLight, toLight, windowsDark } from '../hooks/light'
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
 import { SKINS } from '../hooks/themes'
@@ -276,6 +276,25 @@ test('words are the skin’s or Claude Code’s, and anything else stored reads 
   expect(runSkinCommand('list', { ...DEFAULT_PREFS, words: 'claude' }, NAMES).message).toMatch(/\| words +\| claude +\|/)
 })
 
+test('inline code is the skin’s colour or the accent red, and anything else stored reads as the skin’s', async () => {
+  expect(DEFAULT_PREFS.code).toBe('skin')
+  expect(parsePrefs({ code: 'accent' }, NAMES).code).toBe('accent')
+  expect(parsePrefs({ code: 'red' }, NAMES).code).toBe('skin')
+  expect(parsePrefs({}, NAMES).code).toBe('skin')
+  expect(runSkinCommand('code accent', DEFAULT_PREFS, NAMES).prefs.code).toBe('accent')
+  expect(runSkinCommand('code skin', { ...DEFAULT_PREFS, code: 'accent' }, NAMES).prefs.code).toBe('skin')
+  expect(runSkinCommand('code red', DEFAULT_PREFS, NAMES).message).toBe('usage: /skin code skin|accent')
+  expect(runSkinCommand('list', { ...DEFAULT_PREFS, code: 'accent' }, NAMES).message).toMatch(/\| code +\| accent +\|/)
+  expect(runSkinCommand('help', DEFAULT_PREFS, NAMES).message).toContain('/skin code skin/accent')
+})
+
+test('a palette’s body colour tells a light background from a dark one', async () => {
+  expect(isDarkText(forTheme(noir, true).palette.fg)).toBe(true)
+  expect(isDarkText(noir.palette.fg)).toBe(false)
+  expect(isDarkText(toLight(tokyoNight.palette).fg)).toBe(true)
+  expect(isDarkText('ansi256(7)')).toBe(false)
+})
+
 test('expand opens every tool group, is off by default, and anything but a boolean stored reads as off', async () => {
   expect(DEFAULT_PREFS.expand).toBe(false)
   expect(parsePrefs({ expand: true }, NAMES).expand).toBe(true)
@@ -487,11 +506,20 @@ test('a light palette is derived with dark text, light bands and deepened colour
   const light = toLight(tokyoNight.palette)
 
   expect(light.fg).toBe('#1f1f1f')
-  expect(light.surface).toBe('#ffffff')
+  expect(light.surface).toBe('#ededed')
   expect(light.run).toBe(deepen(tokyoNight.palette.run, 0.45))
   expect(deepen('#ffffff', 0.5)).toBe('#808080')
   expect(isLightTheme('light-daltonized')).toBe(true)
   expect(isLightTheme('dark')).toBe(false)
+})
+
+test('every light palette draws its bands a step off a white background', async () => {
+  for (const skin of SKINS.filter(each => each.ansi === undefined)) {
+    const { surface, zebra } = forTheme(skin, true).palette
+
+    expect([skin.name, surface]).not.toEqual([skin.name, '#ffffff'])
+    expect([skin.name, zebra]).not.toEqual([skin.name, '#ffffff'])
+  }
 })
 
 test('SKINS_THEME wins, then the theme, then the terminal and the system for auto', async () => {

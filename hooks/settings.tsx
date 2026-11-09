@@ -23,6 +23,7 @@ export type SettingsActions = {
   icons: () => void
   prompt: () => void
   words: () => void
+  code: () => void
   edit: (slot: SkinSlot) => void
   paint: (hex: string) => void
 }
@@ -132,6 +133,7 @@ export function settingsPane(look: Look, ui: PaneUi, model: SettingsModel, actio
         <Button key="icons" label={`icons ${prefs.icons}`} hotkey="i" plain onPress={() => actions.icons()} />
         <Button key="prompt" label={`prompt ${prefs.prompt}`} hotkey="a" plain onPress={() => actions.prompt()} />
         <Button key="words" label={`words ${prefs.words}`} hotkey="e" plain onPress={() => actions.words()} />
+        <Button key="code" label={`code ${prefs.code}`} hotkey="j" plain onPress={() => actions.code()} />
       </Box>
 
       <Box flexDirection="column">

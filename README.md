@@ -81,6 +81,7 @@ Built-in skins: `noir`, `tokyo-night`, `dracula`, `catppuccin`, `rose-pine`, `no
 | `/skin tables on/text/off` | Tables as cards, as selectable text on the desktop, or Claude Code's own |
 | `/skin prompt left/right/plain` | In the terminal, which side your prompt's outline sits on, or a plain leading marker. The desktop keeps Claude Code's own messages, with copy and rewind |
 | `/skin words claude/skin` | Whose words the spinner and the turn footer show: Claude Code's own, or the skin's (the default) |
+| `/skin code skin/accent` | How inline code reads: in the skin's own colour on its band (the default), or as an accent red word on the band, as Notion draws it |
 | `/skin icons unicode/ascii` | The icon set, and ASCII-only diagrams in the terminal |
 
 **Parts**, each switched with `/skin <part> on` or `off`:

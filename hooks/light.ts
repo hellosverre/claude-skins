@@ -3,7 +3,8 @@ import type { Palette, Skin } from './skin'
 
 // Every skin works on a light background too. A skin may carry its own light palette;
 // the rest are derived: body text goes near-black, bands go near-white, and each colour
-// is deepened until it reads on white.
+// is deepened until it reads on white. A band is a step off white, never white itself, so
+// inline code and a table's header still show on a white background.
 
 const channels = (hex: string): [number, number, number] => [
   parseInt(hex.slice(1, 3), 16),
@@ -13,6 +14,17 @@ const channels = (hex: string): [number, number, number] => [
 
 const toHex = (rgb: readonly number[]): string =>
   `#${rgb.map(value => Math.round(Math.max(0, Math.min(255, value))).toString(16).padStart(2, '0')).join('')}`
+
+// Whether `hex` is a colour for text on a light background: a palette's `fg` tells light from dark.
+export function isDarkText(hex: string): boolean {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) {
+    return false
+  }
+
+  const [r, g, b] = channels(hex)
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128
+}
 
 // `amount` of the way from `hex` to black.
 export const deepen = (hex: string, amount: number): string =>
@@ -32,7 +44,7 @@ export function toLight(palette: Palette): Palette {
     user: deep(palette.user),
     fg: '#1f1f1f',
     muted: '#6b6b6b',
-    surface: '#ffffff',
+    surface: '#ededed',
     zebra: '#f2f2f2',
     ok: deepen(palette.ok, 0.5),
     err: deepen(palette.err, 0.25),
