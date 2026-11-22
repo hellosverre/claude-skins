@@ -2,7 +2,7 @@ import { renderMermaidAscii, seriesColors, setChartSize } from './vendor/mermaid
 import type { AsciiTheme } from './vendor/mermaid-ascii.js'
 import { charWidth, widthOf } from './markdown'
 import { frontmatterOf } from './mermaid-lex'
-import type { Slot } from './skin'
+import type { ColourSlot } from './skin'
 
 // A Mermaid fence laid out in two dimensions by beautiful-mermaid's terminal renderer,
 // then handed back as runs of text tagged with what they draw, so the skin can colour
@@ -10,7 +10,7 @@ import type { Slot } from './skin'
 
 // The same runs carry the charts this mod draws itself (chart-art.ts): those also name a
 // skin slot outright, and a background for half-block cells.
-export type Tone = 'fg' | 'muted' | 'title' | { box: number } | { series: number } | { slot: Slot }
+export type Tone = 'fg' | 'muted' | 'title' | { box: number } | { series: number } | { slot: ColourSlot }
 
 export interface Run {
   text: string

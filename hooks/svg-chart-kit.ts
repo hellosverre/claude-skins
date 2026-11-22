@@ -1,4 +1,4 @@
-import type { Palette, Slot } from './skin'
+import type { ColourSlot, Palette } from './skin'
 import { escape, fitText, measure } from './svg-kit'
 
 // What the chart cards share: the header band's height, the inset, the order the skin's
@@ -9,7 +9,7 @@ export const PAD = 24
 
 export type Body = { body: string; height: number }
 
-const SERIES: readonly Slot[] = ['user', 'read', 'ok', 'warn', 'web', 'mcp', 'search', 'err']
+const SERIES: readonly ColourSlot[] = ['user', 'read', 'ok', 'warn', 'web', 'mcp', 'search', 'err']
 
 // How far apart two colours must be to tell neighbouring series apart: redmean distance,
 // past rose-pine's two pines (79) and short of the accents a skin means as different.

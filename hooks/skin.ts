@@ -10,7 +10,14 @@ export type ToolKind = Exclude<Kind, 'other'>
 
 export type Slot = SkinSlot
 
-export type Palette = Readonly<Record<Slot, string>>
+// The slots every skin fills; `border` is the one it may leave out.
+export type ColourSlot = Exclude<Slot, 'border'>
+
+// Every slot but `border` is filled by every skin; `border` is only there when a skin sets it.
+export type Palette = Readonly<Record<ColourSlot, string>> & { readonly border?: string }
+
+// The colour a slot paints: `border` follows `muted` until a skin sets it.
+export const colourOf = (palette: Palette, slot: Slot): string => palette[slot] ?? palette.muted
 
 export type Skin = {
   readonly name: string

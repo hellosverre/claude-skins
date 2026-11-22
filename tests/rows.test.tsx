@@ -8,6 +8,7 @@ import { mermaidArt } from '../hooks/mermaid-art'
 import { literal } from '../hooks/rows'
 import { contextPercent } from '../hooks/register'
 import { cardWidth } from '../hooks/svg-kit'
+import gruvbox from '../hooks/themes/gruvbox'
 import noir from '../hooks/themes/noir'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -340,6 +341,24 @@ test('a typed prompt sits in an outline sized to its text, other senders keep th
   const notice = await $.ui.mount(prompt('task-notification'))
   expect(await notice.find({ type: 'Text', text: 'stock row' })).toBeDefined()
   await notice.unmount()
+})
+
+test('the prompt outline follows muted until a skin sets border', async ($, on) => {
+  stubEngine(on)
+
+  const outline = async () => {
+    const typed = await $.ui.mount({ ...SITE, surface: 'terminal', component: 'UserMessage', requestId: 'm1', props: { text: 'fix the build', origin: { kind: 'composer' }, isExpanded: false } })
+    const column = (await typed.find({ type: 'Box' })) as { children?: readonly { props?: { borderColor?: string } }[] } | undefined
+    await typed.unmount()
+
+    return column?.children?.[0]?.props?.borderColor
+  }
+
+  await runSkin($, 'gruvbox')
+  expect(await outline(), 'a skin that sets no border keeps the outline in muted').toBe(gruvbox.palette.muted)
+
+  await $.tool.call({ tool: 'mcp__skins__design', action: 'save', name: 'sunset', base: 'gruvbox', palette: { border: '#ff8800' } })
+  expect(await outline(), 'a skin that sets border draws the outline in it').toBe('#ff8800')
 })
 
 test('a prompt in Markdown shows its marks as typed, and brackets and parentheses never open math', () => {

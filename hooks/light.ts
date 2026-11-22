@@ -34,6 +34,7 @@ export function toLight(palette: Palette): Palette {
     muted: '#6b6b6b',
     surface: '#ffffff',
     zebra: '#f2f2f2',
+    ...(palette.border === undefined ? {} : { border: deep(palette.border) }),
     ok: deepen(palette.ok, 0.5),
     err: deepen(palette.err, 0.25),
     warn: deepen(palette.warn, 0.5),

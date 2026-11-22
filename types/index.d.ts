@@ -1,5 +1,6 @@
 // Every colour a skin names. `fg` is body text, `muted` secondary text, `surface` the
-// band behind a table header, `zebra` every other table row.
+// band behind a table header, `zebra` every other table row. `border` is optional: the
+// outline around a typed prompt, which follows `muted` until a skin sets it.
 export type SkinSlot =
   | 'read'
   | 'write'
@@ -13,6 +14,7 @@ export type SkinSlot =
   | 'muted'
   | 'surface'
   | 'zebra'
+  | 'border'
   | 'ok'
   | 'err'
   | 'warn'
