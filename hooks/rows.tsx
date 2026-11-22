@@ -357,11 +357,19 @@ export function tableRows(look: Look, table: Table, maxWidth: number, control?: 
     <Box flexDirection="row" {...(band === undefined ? {} : { backgroundColor: band })}>
       {cells.map((cell, i) => (
         <Box {...size(i)} flexDirection="column" paddingX={CELL_PAD} alignItems={JUSTIFY[table.align[i] ?? 'left']}>
-          {wrapLines(cell, widths[i] ?? 0, Infinity).map(line => (
-            <Text color={palette.fg} bold={isHeader} wrap="truncate-end">
-              {line}
+          {look.surface === 'terminal' ? (
+            wrapLines(cell, widths[i] ?? 0, Infinity).map(line => (
+              <Text color={palette.fg} bold={isHeader} wrap="truncate-end">
+                {line}
+              </Text>
+            ))
+          ) : (
+            // The desktop's column is narrower than the width it reports and its font is
+            // proportional, so lines wrapped by cell count would be cut: the app wraps it (#105).
+            <Text color={palette.fg} bold={isHeader} wrap="wrap">
+              {cell.split(/\s+/).filter(Boolean).join(' ')}
             </Text>
-          ))}
+          )}
         </Box>
       ))}
     </Box>

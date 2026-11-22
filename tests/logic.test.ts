@@ -18,6 +18,7 @@ import { deepen, forTheme, gnomeDark, isDarkText, isLightTheme, macDark, resolve
 import { parseFolders, prefsFor, withFolder, withoutFolder } from '../hooks/folders'
 import { kindOf, summarize, toolLabel } from '../hooks/tools'
 import { SKINS } from '../hooks/themes'
+import { turnKey } from '../hooks/register'
 import { inlineRuns, splitBlocks } from '../hooks/blocks'
 import { errorLine, isQuiet, isReadOnlyShell, segmentsOf } from '../hooks/quiet'
 import tokyoNight from '../hooks/themes/tokyo-night'
@@ -134,6 +135,20 @@ test('wide characters count two cells, so CJK cells are measured and cut in term
   expect(wrapLines('In one place: the orchestrator', 14, 6)).toEqual(['In one place:', 'the', 'orchestrator'])
   expect(wrapLines('레일 스피너 카탈로그', 7, 6).every(line => widthOf(line) <= 7)).toBe(true)
   expect(wrapLines('word '.repeat(40), 10, 2)).toEqual(['word word', 'word word…'])
+})
+
+test('turn footer stats keep the newest turns, short ones included (#106)', async () => {
+  const kept = 40
+  const add = (turns: Record<string, number>, ms: number) => Object.fromEntries([...Object.entries(turns), [turnKey(ms), ms]].slice(-kept))
+  let turns: Record<string, number> = {}
+
+  for (let i = 0; i < kept; i += 1) {
+    turns = add(turns, 60000 + i)
+  }
+  turns = add(turns, 900)
+
+  expect(turns[turnKey(900)], 'the newest, shortest turn').toBe(900)
+  expect(turns[turnKey(60000)], 'the oldest turn is the one trimmed').toBeUndefined()
 })
 
 test('a made skin lays its slots over its base, and bad drafts are refused with a reason', async () => {

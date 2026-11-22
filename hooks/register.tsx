@@ -56,6 +56,11 @@ const FAST_RETRIES = 4
 const RETRY_MAX_MS = 1000
 const STALE_AHEAD_MS = RETRY_MAX_MS + 1000
 const KEPT_TURNS = 40
+
+// A turn's footer stats are keyed by its duration. An integer-like key would be enumerated
+// in numeric order, so the trim would keep the longest turns rather than the newest (#106).
+export const turnKey = (durationMs: number | undefined): string => `d${durationMs}`
+
 // How often an `auto` theme asks the system again: nothing tells a plugin it changed.
 const APPEARANCE_MS = 5000
 
@@ -180,10 +185,23 @@ async function systemDark($: EngineInterface): Promise<boolean | undefined> {
 // `SKINS_THEME` first, then the theme setting, and for `auto` the terminal and the system.
 // `theme` is a value just written, which `$.config.list()` does not answer with yet.
 // Resolves true when the answer came from the system's appearance, which can change under it.
+// A setting that cannot be read (no session bound yet, or an organization policy that keeps
+// settings from user plugins, #107) still lets SKINS_THEME and the system decide; the
+// rejection is passed on once the palette is set, so the caller can try the setting again.
 async function refreshTheme($: EngineInterface, theme?: unknown): Promise<boolean> {
+  let unread: unknown
+  const setting =
+    theme ??
+    (await $.config.list().then(
+      rows => rows.find(row => row.key === 'theme')?.value,
+      (error: unknown) => {
+        unread = error ?? new Error('theme setting unreadable')
+        return undefined
+      },
+    ))
   const hints = {
     override: await $.env.get('SKINS_THEME'),
-    theme: theme ?? (await $.config.list()).find(row => row.key === 'theme')?.value,
+    theme: setting,
     colorfgbg: await $.env.get('COLORFGBG'),
   }
   // Asks the system only when nothing before it decided.
@@ -196,6 +214,10 @@ async function refreshTheme($: EngineInterface, theme?: unknown): Promise<boolea
     await update($, lightAtom, () => isLight)
   }
 
+  if (unread !== undefined) {
+    throw unread
+  }
+
   return dark !== undefined
 }
 
@@ -203,7 +225,11 @@ async function refreshTheme($: EngineInterface, theme?: unknown): Promise<boolea
 let appearance: Timer | undefined
 
 async function followTheme($: EngineInterface, theme?: unknown): Promise<void> {
-  const followsSystem = await refreshTheme($, theme)
+  const followsSystem = await refreshTheme($, theme).catch((error: unknown) => {
+    appearance?.cancel()
+    appearance = undefined
+    throw error
+  })
 
   appearance?.cancel()
   appearance = followsSystem
@@ -415,6 +441,11 @@ const sessionId = ($: EngineInterface): Promise<string | undefined> => $.session
 // rejects while the prefs already load. The next draw or row reads it again (#77).
 let themePending = false
 
+// Every draw retries, so a setting that never becomes readable (#107) stops being asked for
+// after this many tries; a new session starts the count again.
+const THEME_RETRIES = 20
+let themeTries = 0
+
 async function retryTheme($: EngineInterface): Promise<void> {
   if (!themePending) {
     return
@@ -423,7 +454,8 @@ async function retryTheme($: EngineInterface): Promise<void> {
   themePending = false
 
   await followTheme($).catch((error: unknown) => {
-    themePending = true
+    themeTries += 1
+    themePending = themeTries < THEME_RETRIES
     $.ui.log(`theme not read yet: ${error instanceof Error ? error.message : String(error)}`, { to: 'debug' })
   })
 }
@@ -453,6 +485,7 @@ async function reloadIfNewSession($: EngineInterface, known?: string): Promise<v
 
   // The prefs stand without the theme; only the theme waits for the bind.
   themePending = true
+  themeTries = 0
   await retryTheme($)
 }
 
@@ -673,7 +706,9 @@ export const register: Register = on => {
     loadedFor = await sessionId($)
     await load($)
     await refreshUsage($)
-    await followTheme($)
+    themeTries = 0
+    themePending = true
+    await retryTheme($)
 
     // Off the start's path: a slow or offline network must not hold the session up.
     // The star ask waits a session when the update notice is showing; one toast at a time.
@@ -777,7 +812,7 @@ export const register: Register = on => {
       isWorking = false
       const finished = stats
       await update($, turnsAtom, turns =>
-        Object.fromEntries([...Object.entries(turns), [String(e.durationMs), finished]].slice(-KEPT_TURNS)),
+        Object.fromEntries([...Object.entries(turns), [turnKey(e.durationMs), finished]].slice(-KEPT_TURNS)),
       )
 
       if (e.answer.trim() !== '') {
@@ -1260,7 +1295,7 @@ export const register: Register = on => {
     const turns = await read($, turnsAtom)
     const word = active.prefs.words === 'claude' ? e.props.word : (pick(active.skin.done, e.props.word) ?? e.props.word)
 
-    return footerRow(lookOf($.ui.resolve(e), active, e.surface), word, e.props.durationMs, turns[String(e.props.durationMs)])
+    return footerRow(lookOf($.ui.resolve(e), active, e.surface), word, e.props.durationMs, turns[turnKey(e.props.durationMs)])
   })
 
   // The band above the prompt: context and plan limits. Another mod's drawing there,

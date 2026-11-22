@@ -843,6 +843,29 @@ test('with tables as text the desktop gets a text grid and the app’s own code 
   expect(await stock.find({ type: 'Text', text: 'stock row' })).toBeDefined()
 })
 
+test('with tables as text a long desktop cell is drawn whole for the app to wrap, never cut with … (#105)', async ($, on) => {
+  stubEngine(on)
+  await runSkin($, 'tables text')
+
+  const long = 'This cell has enough text to go past the column width and needs to wrap onto several lines up to its last word, which is: end.'
+  const ui = await $.ui.mount({
+    ...SITE,
+    surface: 'desktop',
+    component: 'AssistantMessage',
+    requestId: 'tx3',
+    props: { text: `| Item | Description |
+|---|---|
+| Short | ok |
+| Long | ${long} |`, isFirstOfReply: true },
+  })
+  const cell = (await ui.find({ type: 'Text', text: long })) as { props: { wrap?: string } } | undefined
+
+  expect(cell?.props.wrap).toBe('wrap')
+  const texts = (await ui.findAll({ type: 'Text' })) as { children?: unknown[] }[]
+  expect(texts.some(node => node.children?.some(child => typeof child === 'string' && child.endsWith('…')))).toBe(false)
+  await ui.unmount()
+})
+
 test('on the desktop an edit is a diff card and a shell command a terminal card', async ($, on) => {
   stubEngine(on)
 
@@ -1306,6 +1329,21 @@ test('an auto theme follows the system, and SKINS_THEME overrides the setting', 
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
   const dark = await $.ui.mount({ ...toolUse(call('Bash', { command: 'ls' })), requestId: 'again' })
   expect(spanColor(await dark.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#ededed')
+})
+
+test('SKINS_THEME still decides when an organization policy keeps the theme setting out of reach (#107)', async ($, on) => {
+  stubEngine(on, { env: true })
+  on('env.get', ($, e) => ({ value: e.name === 'SKINS_THEME' ? 'light' : undefined }))
+  on('config.list', () => {
+    throw new Error('settings are not available to this plugin')
+  })
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  const row = await $.ui.mount(toolUse(call('Bash', { command: 'ls' })))
+  expect(spanColor(await row.find({ type: 'Text', text: /Bash/ }), 'Bash')).toBe('#111111')
 })
 
 test('a theme set mid-session is drawn at once, though the settings list still holds the old one', async ($, on) => {

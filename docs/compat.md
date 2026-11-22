@@ -8,9 +8,14 @@ marked as verified; everything else says so.
 | Surface | Windows | macOS | Linux |
 |---|---|---|---|
 | Terminal | **Verified at 0.3.0** by the author: 120 engine tests, manual use. CI from 0.5.0: engine tests, validate, tsc | CI from 0.5.0: engine tests, validate, tsc; never looked at | **Verified at 0.5.0**: 168 engine tests, benchmark below, Claude Code 2.1.288 |
-| Desktop app (Code tab) | **Verified at 0.3.0** by the author: manual use | Untested | No desktop app on Linux; the desktop path runs in the engine tests and the benchmark only |
+| Desktop app (Code tab) | **Verified at 0.3.0** by the author: manual use | Untested. One report of skins loading but drawing nothing ([#102](https://github.com/hellosverre/claude-skins/issues/102)) | No desktop app on Linux; the desktop path runs in the engine tests and the benchmark only |
+| Desktop app, a CLI session viewed through Remote Control | The usage band does not show ([#103](https://github.com/hellosverre/claude-skins/issues/103)); the rest is untested | Untested | No desktop app on Linux |
 | VS Code | Untested | Untested | Untested |
 | Mobile | Untested | Untested | Untested |
+
+**A Remote Control view is not a supported surface yet.** skins runs in the CLI process that owns
+the session; in the desktop app's view of it the usage band does not show, and why is not traced
+yet. For the band, use the terminal, or start the session in the desktop app itself.
 
 **VS Code and mobile have no path of their own.** Both surfaces offer `Svg`, so they take the
 same branch as the desktop app: vector cards, icon rows, the desktop spinner
