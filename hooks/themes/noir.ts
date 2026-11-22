@@ -32,7 +32,7 @@ const skin: Skin = {
     user: '#111111',
     fg: '#151515',
     muted: '#6b6b6b',
-    surface: '#ffffff',
+    surface: '#ededed',
     zebra: '#f2f2f2',
     ok: '#151515',
     err: '#c42b2b',
